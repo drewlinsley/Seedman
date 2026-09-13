@@ -14,8 +14,15 @@ you have to still be alive to spend what you saved.
 Planning weeks 2–12 of 2026, the survival objective gives up 6.3 projected points
 to buy a 6-point jump in modelled survival odds (34.1% → 40.1%). Read that as a
 statement about the objective, not a measured edge: both numbers come from the
-model scoring itself. For measured results against real seasons, see
-[What the backtest says](#what-the-backtest-says) — which is less flattering.
+model scoring itself.
+
+**Measured against real seasons it does not hold up so far.** The projections
+beat every naive baseline on ranking, including on held-out data. The survival
+weighting has no measured support at all — in the one season-simulation run it
+finished behind both a points-maximiser and plain greedy. Details, including why
+that simulation is too noisy to settle the question either way, are in
+[What the backtest says](#what-the-backtest-says). Until it is settled,
+`--no-survival` is the conservative choice.
 
 ```
  week  projected    sd  cut_line  survive_pct  teams_alive  point_weight
@@ -97,6 +104,48 @@ and the field calibration uses the same projections, so the survival comparison
 largely cancels it -- but lineup totals read low early in a season. A calibration
 bucketed by games played cuts the early-season bias to 21%, and costs 5.6 points
 a week on the decision metric, so it is not enabled.
+
+### Does the survival objective actually win leagues?
+
+Separately from projection accuracy: simulate whole survivor seasons on real
+scores. Each strategy walks the season re-planning every week, then is scored
+against 400 draws of an eleven-team field of greedy managers working from the
+same projections with 30% noise. Lowest score is cut, every week.
+
+Held-out 2025, twelve teams:
+
+| strategy | avg weeks survived | won outright | avg weekly points |
+|---|---|---|---|
+| points-maximising | 7.80 | 5.5% | 67.6 |
+| greedy (start the best available) | 6.07 | 2.8% | 74.5 |
+| **survival-weighted** | **1.81** | **1.0%** | 72.1 |
+
+That is the opposite of the intended result, and it is the honest number. The
+survival objective -- the centrepiece of this whole design -- finished last, and
+all three finished at or below the 8.3% a coin flip gets in a twelve-team league.
+
+Two things it is *not*. It is not a mis-estimated cut line: checked against the
+simulated field week by week, the model's cut line is accurate to within half a
+point on average. It is not weak lineups either; the survival strategy averaged
+72 points a week against a field averaging 63.
+
+What it is, mostly, is **an evaluation too noisy to conclude from**. Each
+strategy walks the season exactly once, so its sixteen weekly scores are fixed
+and only the opponents are resampled. If the survival strategy's week-2 lineup
+happens to finish last that week, it is eliminated in week 2 in nearly all 400
+replications, and the 400 tells you nothing the 1 did not. `worst_week` of 27.1
+against a week-2 cut line near 42 is exactly that story. Fixing it means
+resampling the strategy's own season -- multiple seasons, or bootstrapped
+outcomes -- which is the obvious next piece of work and is not done here.
+
+What can be said with the evidence in hand: **there is no measured support for
+the survival weighting beating a plain greedy lineup, and one season's simulation
+points the other way.** The theory is sound and the implementation does what the
+theory says; whether it helps in practice is unproven. Given it deliberately
+fields weaker lineups early in exchange for later strength, and early
+elimination ends the season, the burden of proof sits with it. Treat
+`--no-survival` as the conservative default until a better-powered simulation
+says otherwise.
 
 Reproduce any of this:
 
