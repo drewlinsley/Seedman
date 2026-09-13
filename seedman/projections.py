@@ -112,6 +112,7 @@ class ProjectionModel:
         availability_model: AvailabilityModel | None = None,
         availability_curves: pd.DataFrame | None = None,
         through_week: int | None = None,
+        as_of: pd.Timestamp | None = None,
     ) -> None:
         self.config = config
         self.injuries = injuries
@@ -122,6 +123,10 @@ class ProjectionModel:
         # 0.49-0.55 on held-out 2025 -- i.e. no better than a coin flip.
         self.availability_curves = availability_curves
         self.through_week = through_week
+        # Wall-clock cutoff. A player whose game has already kicked off cannot be
+        # put in a lineup, however good his projection is -- the same class of
+        # constraint as a bye week, and just as fatal to ignore.
+        self.as_of = pd.Timestamp(as_of) if as_of is not None else None
 
         # Everything the model is allowed to see is clipped here, once, so that
         # no downstream method can accidentally reach into the future. Live this
@@ -313,6 +318,11 @@ class ProjectionModel:
         ctx = pd.concat([home, away], ignore_index=True)
         opp_totals = ctx.set_index("team")["implied_total"]
         ctx["opponent_implied_total"] = ctx["opponent"].map(opp_totals)
+
+        if self.as_of is not None:
+            started = _kicked_off(games, self.as_of)
+            if started:
+                ctx = ctx[~ctx["team"].isin(started)]
         return ctx
 
     def _context_multiplier(self, position: str, own: float, opp: float) -> float:
@@ -504,6 +514,19 @@ def _calibrate_level(rate: float, position: str, week: int) -> float:
     # Never return a negative expectation: a player cannot be worse than nothing
     # for lineup purposes, and the optimizer treats <=0 as "not a candidate".
     return max(0.0, rate * entry["slope"] + entry["intercept"])
+
+
+def _kicked_off(games: pd.DataFrame, as_of: pd.Timestamp) -> set[str]:
+    """Teams whose game has already started, and so are unpickable."""
+    kickoff = pd.to_datetime(
+        games["gameday"].astype(str) + " " + games["gametime"].fillna("13:00").astype(str),
+        errors="coerce",
+    )
+    # A game with an unparseable time is treated as not yet played: wrongly
+    # dropping an available player is worse than briefly offering a locked one,
+    # which the league site would reject anyway.
+    started = games[kickoff.notna() & (kickoff <= as_of)]
+    return set(started["home_team"]) | set(started["away_team"])
 
 
 def _mask_future_data(

@@ -49,6 +49,7 @@ def build_projections(
     *,
     as_of_week: int,
     horizon: int,
+    as_of: pd.Timestamp | None = None,
 ) -> tuple[pd.DataFrame, list[int]]:
     """Project every eligible player from `as_of_week` out to the horizon."""
     season = config.season
@@ -72,6 +73,7 @@ def build_projections(
         rosters=rosters,
         availability_model=AvailabilityModel(),
         availability_curves=curves,
+        as_of=as_of,
     )
     projections = model.project_weeks(weeks, as_of_week=as_of_week)
     return projections, weeks
@@ -236,12 +238,13 @@ def run(
     candidates: int = 45,
     max_per_team: int = 2,
     max_per_game: int = 3,
+    as_of: pd.Timestamp | None = None,
 ) -> PipelineResult:
     """Fetch, project, calibrate and optimise in one go."""
     client = NflverseClient(cache_dir=Path(cache_dir), offline=offline)
 
     projections, weeks = build_projections(
-        config, client, as_of_week=state.current_week, horizon=horizon
+        config, client, as_of_week=state.current_week, horizon=horizon, as_of=as_of
     )
     if projections.empty:
         raise RuntimeError(

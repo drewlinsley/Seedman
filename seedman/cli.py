@@ -66,6 +66,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p_proj.add_argument("--week", type=int, default=None)
     p_proj.add_argument("--position", default=None)
     p_proj.add_argument("--top", type=int, default=20)
+    p_proj.add_argument("--as-of", default="now",
+                        help="drop players whose game has kicked off")
     p_proj.set_defaults(handler=cmd_project)
 
     p_opt = sub.add_parser("optimize", help="plan the rest of the season")
@@ -90,6 +92,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_opt.add_argument("--candidates", type=int, default=45)
     p_opt.add_argument("--offline", action="store_true")
     p_opt.add_argument("--csv", type=Path, default=None, help="write the plan to CSV")
+    p_opt.add_argument(
+        "--as-of",
+        default="now",
+        help="drop players whose game has kicked off (ISO timestamp, or 'now', or 'off')",
+    )
     p_opt.set_defaults(handler=cmd_optimize)
 
     p_cal = sub.add_parser("calibrate", help="fit model constants from historical seasons")
@@ -197,7 +204,7 @@ def cmd_project(args: argparse.Namespace) -> int:
     client = NflverseClient(cache_dir=args.cache)
     week = args.week or state.current_week
     projections, _ = pipeline.build_projections(
-        config, client, as_of_week=week, horizon=1
+        config, client, as_of_week=week, horizon=1, as_of=_parse_as_of(args.as_of)
     )
     frame = projections[projections["week"] == week]
     if args.position:
@@ -240,6 +247,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         candidates=args.candidates,
         max_per_team=args.max_per_team,
         max_per_game=args.max_per_game,
+        as_of=_parse_as_of(args.as_of),
     )
     plan = result.plan
 
@@ -260,6 +268,15 @@ def cmd_optimize(args: argparse.Namespace) -> int:
             print(f"  - {note}")
         print("!" * 72)
     return 0
+
+
+def _parse_as_of(value: str):
+    """Resolve the --as-of flag to a timestamp, or None to disable the filter."""
+    if not value or str(value).lower() in {"off", "none", "false"}:
+        return None
+    if str(value).lower() == "now":
+        return pd.Timestamp.now()
+    return pd.Timestamp(value)
 
 
 def _print_plan(plan, config: LeagueConfig) -> None:

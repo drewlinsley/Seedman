@@ -93,3 +93,74 @@ def test_no_cutoff_means_no_masking(config: LeagueConfig):
     model = _model(config, None, _stats([1, 2, 3], 50))
     assert model.schedule["home_score"].notna().all()
     assert model.schedule["total_line"].notna().all()
+
+
+# ----------------------------------------------------------------------
+# kickoff lock
+# ----------------------------------------------------------------------
+KICKOFF_SCHEDULE = pd.DataFrame(
+    [
+        {"season": 2026, "week": 1, "home_team": "EARLY", "away_team": "ALSOEARLY",
+         "home_score": 20.0, "away_score": 17.0, "result": 3.0, "total": 37.0,
+         "spread_line": 2.0, "total_line": 44.0,
+         "gameday": "2026-09-10", "gametime": "20:15"},
+        {"season": 2026, "week": 1, "home_team": "LATE", "away_team": "ALSOLATE",
+         "home_score": None, "away_score": None, "result": None, "total": None,
+         "spread_line": 1.0, "total_line": 44.0,
+         "gameday": "2026-09-13", "gametime": "16:25"},
+    ]
+)
+
+
+def _kickoff_model(config, as_of):
+    return ProjectionModel(
+        config,
+        weekly_current=pd.DataFrame(),
+        weekly_prior=pd.DataFrame(),
+        schedule=KICKOFF_SCHEDULE,
+        injuries=pd.DataFrame(),
+        rosters=pd.DataFrame(),
+        as_of=as_of,
+    )
+
+
+def test_teams_whose_game_started_are_unpickable(config: LeagueConfig):
+    """A Thursday-night player cannot go in a Sunday-morning lineup.
+
+    Missing this recommended a player whose game had already finished.
+    """
+    model = _kickoff_model(config, pd.Timestamp("2026-09-13 09:52"))
+    teams = set(model.team_context(1)["team"])
+    assert teams == {"LATE", "ALSOLATE"}
+
+
+def test_nothing_is_locked_before_the_first_kickoff(config: LeagueConfig):
+    model = _kickoff_model(config, pd.Timestamp("2026-09-09 08:00"))
+    assert len(model.team_context(1)) == 4
+
+
+def test_everything_locks_once_the_last_game_starts(config: LeagueConfig):
+    model = _kickoff_model(config, pd.Timestamp("2026-09-13 23:00"))
+    assert model.team_context(1).empty
+
+
+def test_no_as_of_means_no_kickoff_filtering(config: LeagueConfig):
+    """Backtests replay whole weeks and must not have players silently removed."""
+    model = _kickoff_model(config, None)
+    assert len(model.team_context(1)) == 4
+
+
+def test_unparseable_kickoff_time_leaves_the_team_available(config: LeagueConfig):
+    """Wrongly dropping an available player is worse than offering a locked one."""
+    schedule = KICKOFF_SCHEDULE.copy()
+    schedule.loc[0, "gametime"] = "not a time"
+    model = ProjectionModel(
+        config,
+        weekly_current=pd.DataFrame(),
+        weekly_prior=pd.DataFrame(),
+        schedule=schedule,
+        injuries=pd.DataFrame(),
+        rosters=pd.DataFrame(),
+        as_of=pd.Timestamp("2026-09-13 09:52"),
+    )
+    assert "EARLY" in set(model.team_context(1)["team"])
