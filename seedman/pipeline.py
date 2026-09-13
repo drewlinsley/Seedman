@@ -61,6 +61,8 @@ def build_projections(
     last_week = min(config.survival.final_week, as_of_week + horizon - 1)
     weeks = list(range(as_of_week, last_week + 1))
 
+    curves = availability_curves(config, client, season, as_of_week, horizon)
+
     model = ProjectionModel(
         config,
         weekly_current=weekly_current,
@@ -69,9 +71,45 @@ def build_projections(
         injuries=injuries,
         rosters=rosters,
         availability_model=AvailabilityModel(),
+        availability_curves=curves,
     )
     projections = model.project_weeks(weeks, as_of_week=as_of_week)
     return projections, weeks
+
+
+def availability_curves(
+    config: LeagueConfig,
+    client: NflverseClient,
+    season: int,
+    as_of_week: int,
+    horizon: int,
+) -> pd.DataFrame | None:
+    """Fitted multi-week availability for every player, as known this week.
+
+    Returns None when no hazard has been fitted, in which case the projection
+    model falls back to its prior. Building the panel costs a few seconds; the
+    alternative was an AR(1) with no discriminative power at all, so it is worth
+    the wait.
+    """
+    from .availability import FittedHazard, build_panel
+
+    hazard = FittedHazard.from_dict(fitted.get().raw.get("availability_hazard") or {})
+    if hazard is None:
+        return None
+
+    try:
+        panel = build_panel([season], client.cache_dir, config)
+    except FileNotFoundError:
+        log.warning("no cached data for %s; falling back to the prior", season)
+        return None
+    if panel.empty:
+        return None
+
+    # The player's state is whatever his most recent completed week says.
+    latest = int(panel[panel["week"] < as_of_week]["week"].max()) if len(panel) else 0
+    if not latest:
+        return None
+    return hazard.curves_for_week(panel, season, latest, horizons=max(1, horizon))
 
 
 def calibrate_field(

@@ -328,6 +328,7 @@ def calibrate(
     cache_dir: Path,
     *,
     tune_rates: bool = False,
+    fit_hazard: bool = True,
     validate_season: int | None = None,
 ) -> dict:
     """Run every fit and return a dict ready to be written as YAML."""
@@ -345,6 +346,10 @@ def calibrate(
         "volatility": fit_volatility(seasons),
         "field_lineups": fit_field_lineups(config, seasons),
     }
+    if fit_hazard:
+        result["availability_hazard"] = fit_availability_hazard(
+            config, fit_seasons, cache_dir=cache_dir
+        )
     if tune_rates:
         rate_model = tune_rate_model(
             config, fit_seasons, cache_dir=cache_dir, validate_season=validate_season
@@ -639,3 +644,22 @@ def fit_field_lineups(
             "n": int(len(values)),
         }
     return out
+
+
+def fit_availability_hazard(
+    config: LeagueConfig, fit_seasons: list[int], *, cache_dir: Path
+) -> dict:
+    """Fit the two-state weekly availability model and return it as plain data.
+
+    This replaces a hand-set AR(1) that measured at AUC 0.49-0.55 on held-out
+    2025 -- no better than a coin flip -- while confidently reporting ~0.90
+    availability for a population that was actually available ~0.70 of the time.
+    The fitted chain reaches AUC 0.89 at one week and 0.80 at three, and is
+    calibrated.
+    """
+    from .availability import AvailabilityHazard, build_panel
+
+    panel = build_panel(fit_seasons, cache_dir, config)
+    if panel.empty:
+        return {}
+    return AvailabilityHazard().fit(panel).to_dict()

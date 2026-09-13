@@ -99,6 +99,8 @@ def _build_parser() -> argparse.ArgumentParser:
                        help="season to report but never optimise against")
     p_cal.add_argument("--tune-rates", action="store_true",
                        help="also grid-search the shrinkage hyperparameters (slow)")
+    p_cal.add_argument("--no-hazard", action="store_true",
+                       help="skip fitting the availability hazard model")
     p_cal.add_argument("--out", type=Path, default=Path("configs/fitted.yaml"))
     p_cal.set_defaults(handler=cmd_calibrate)
 
@@ -308,6 +310,7 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
         args.fit,
         args.cache,
         tune_rates=args.tune_rates,
+        fit_hazard=not args.no_hazard,
         validate_season=args.validate,
     )
     write_calibration(result, args.out)
@@ -316,6 +319,12 @@ def cmd_calibrate(args: argparse.Namespace) -> int:
     availability = result.get("availability", {}).get("by_report_status", {})
     for status, entry in sorted(availability.items(), key=lambda kv: kv[1]["value"]):
         print(f"  P(plays | {status:<16}) = {entry['value']:.4f}   (n={entry['n']:,})")
+    hazard = result.get("availability_hazard")
+    if hazard:
+        print(
+            f"\n  availability hazard: {hazard['continuation']['n']:,} continuation rows, "
+            f"{hazard['recovery']['n']:,} recovery rows"
+        )
     rate = result.get("rate_model")
     if rate:
         print(

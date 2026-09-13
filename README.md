@@ -20,7 +20,7 @@ model scoring itself.
 naive baseline on ranking, including on held-out data, and a greedy lineup built
 on them won 19.5% of simulated 2024 leagues against a coin flip's 8.3%. But
 adding the survival weighting *cut* that to 3.2%, and it finished last of three
-strategies in both seasons simulated. Details and caveats in
+strategies in all three seasons simulated. Details and caveats in
 [What the backtest says](#what-the-backtest-says). Until that is overturned,
 `--no-survival` is the right default.
 
@@ -126,14 +126,20 @@ Twelve teams, one elimination a week:
 | points-maximising | 5.92 | 6.8% | 69.7 |
 | **survival-weighted** | **4.62** | **3.2%** | 66.4 |
 
-The survival objective -- the centrepiece of this whole design -- finished last
-in both seasons. That is the honest number and it is not a near miss.
+| 2023 | avg weeks survived | won outright | avg weekly points |
+|---|---|---|---|
+| points-maximising | 10.03 | **21.0%** | 70.8 |
+| greedy | 7.69 | 7.0% | 62.8 |
+| **survival-weighted** | **2.33** | **1.2%** | 63.3 |
 
-2024 makes it worse rather than better, because it rules out the comfortable
-explanation. Greedy won 19.5% of leagues there against the 8.3% a coin flip gets
-in a twelve-team league, so the projections underneath carry a real edge. The
-survival weighting then cuts that 19.5% to 3.2%. It is not that nothing works;
-it is that this specific layer subtracts from what does.
+The survival objective -- the centrepiece of this whole design -- finished last
+in all three seasons. That is the honest number and it is not a near miss.
+
+The other two seasons rule out the comfortable explanation. The best strategy
+won 19.5% of 2024 leagues and 21.0% of 2023 leagues, against the 8.3% a coin
+flip gets in a twelve-team league -- so the projections underneath carry a real
+edge. The survival weighting then cuts that to 3.2% and 1.2%. It is not that
+nothing works; it is that this specific layer subtracts from what does.
 
 Two further explanations are ruled out. The cut line is not mis-estimated:
 checked against the simulated field week by week, the model's is accurate to
@@ -151,12 +157,12 @@ exactly once, so its sixteen weekly scores are fixed and only the opponents
 resample; if the survival strategy's week-2 lineup finishes last that week it
 dies in week 2 across nearly all 400 replications, and the 400 tells you little
 the 1 did not. So each season is closer to one observation than to 400. Two
-seasons agreeing is real evidence, but it is two, and resampling the strategy's
-own season -- more seasons, or bootstrapped outcomes -- is the obvious next piece
-of work and is not done here.
+seasons agreeing is real evidence, but it is three, and resampling the
+strategy's own season -- more seasons, or bootstrapped outcomes -- is the obvious
+next piece of work and is not done here.
 
-**Bottom line: the survival weighting is not supported by the evidence, and two
-seasons point against it.** The theory is sound and the implementation does what
+**Bottom line: the survival weighting is not supported by the evidence, and all
+three seasons point against it.** The theory is sound and the implementation does what
 the theory says, but a mechanism that trades early safety for late strength has
 to earn its keep, and it has not. `--no-survival` is the right default until a
 better-powered simulation says otherwise.
@@ -167,6 +173,60 @@ Reproduce any of this:
 seedman backtest --seasons 2023 2024 2025
 seedman backtest --seasons 2025 --simulate     # full survivor-league simulation
 ```
+
+## Availability is the biggest remaining lever
+
+Measured against a perfect-foresight oracle -- one that knows exactly who suits
+up and nothing else -- availability error costs about **12.6 points a week**
+across four skill slots at planning horizons. For scale, the entire gap between
+these projections and a naive season-to-date average is 3.7. In a format where
+you commit a player to a future week and cannot take him back, this is the
+number that matters.
+
+The model that used to do this job was two lines: today's availability decaying
+toward a hand-set position baseline at a hand-set rate of 0.7 a week. On
+held-out 2025 it measured at **AUC 0.49-0.55** -- a coin flip -- while
+confidently reporting ~0.90 availability for a population that was actually
+available ~0.70 of the time. Every multi-week availability number this project
+produced before that measurement was noise, stated with conviction.
+
+It is now a **two-state discrete-time Markov model**: one logistic hazard for
+"plays next week given he played this week", another for "plays next week given
+he did not", each with its own covariates (injury history, snap share, workload,
+age, current designation and practice participation). Multi-week availability is
+that chain iterated forward.
+
+| held-out 2025, AUC | t+1 | t+2 | t+3 | t+4 | t+6 |
+|---|---|---|---|---|---|
+| fitted hazard | **0.887** | **0.833** | **0.802** | **0.766** | **0.731** |
+| AR(1) it replaces | 0.553 | 0.521 | 0.509 | 0.502 | 0.487 |
+| carry last week forward | 0.811 | 0.750 | 0.717 | 0.698 | 0.653 |
+
+Calibration at t+3 went from one bucket containing 95% of the data at 0.90
+predicted against 0.70 observed, to 0.89→0.89, 0.71→0.77, 0.30→0.23. Downstream
+that is worth +2.4 points a week across four slots -- real, but only about a
+fifth of the oracle ceiling, because a lot of injury is genuinely unforecastable.
+
+**Why not Cox proportional hazards**, which is the natural instinct here and
+where this started: the covariate story is identical, but events land on week
+boundaries so essentially every failure time is tied, and Cox handles ties only
+by approximation; the optimizer needs an absolute probability rather than a
+hazard ratio, which is the part a discrete-time model estimates directly; and
+availability is recurrent and reversible, so a time-to-first-event Cox discards
+everything after a player's first injury. The extensions that do not
+(Andersen-Gill, PWP) end up close to what is implemented here.
+
+The structural gain is what the old model could not express at all: **duration
+dependence**. P(returns next week) falls from 36% after one missed game to 15%
+after four. An AR(1) pulls everyone back toward a fixed baseline at the same
+rate no matter how long they have been out. The Markov chain's fixed point,
+`b / (1 - a + b)`, is a per-player long-run availability learned from his own
+history -- so the position baseline the old model had to be handed now falls out
+of the data instead.
+
+Rookies enter only once they have played, which is both the sensible rule and
+the one that matches how the projections treat them: a player with no record
+regresses to replacement level, not to a starter.
 
 ## Nothing here is hand-tuned any more
 
@@ -361,7 +421,8 @@ seedman/
   scoring.py        component stats -> fantasy points under your rules
   projections.py    shrunk rates x Vegas context x availability, with the
                     through_week clip that makes backtesting honest
-  injury.py         designation -> P(plays), and future-week decay
+  injury.py         designation -> P(plays) for the week in front of you
+  availability.py   two-state weekly hazard: P(available) h weeks out
   correlation.py    same-team / same-game covariance
   survival.py       cut-line distribution and the marginal value of a point
   calibration.py    fits every constant from historical seasons
@@ -373,11 +434,11 @@ seedman/
   cli.py
 configs/league.yaml  ** edit this first **
 configs/fitted.yaml  produced by `seedman calibrate`; do not hand-edit
-tests/               86 tests, no network required
+tests/               109 tests, no network required
 ```
 
 ```bash
-python -m pytest      # 86 passed
+python -m pytest      # 109 passed
 ```
 
 `tests/test_leakage.py` is the one to read first. A backtest that leaks produces

@@ -110,12 +110,17 @@ class ProjectionModel:
         injuries: pd.DataFrame,
         rosters: pd.DataFrame,
         availability_model: AvailabilityModel | None = None,
+        availability_curves: pd.DataFrame | None = None,
         through_week: int | None = None,
     ) -> None:
         self.config = config
         self.injuries = injuries
         self.rosters = rosters
         self.availability = availability_model or AvailabilityModel()
+        # Fitted multi-week availability, indexed by player with one column per
+        # horizon. When absent we fall back to the AR(1), which measured at AUC
+        # 0.49-0.55 on held-out 2025 -- i.e. no better than a coin flip.
+        self.availability_curves = availability_curves
         self.through_week = through_week
 
         # Everything the model is allowed to see is clipped here, once, so that
@@ -385,9 +390,7 @@ class ProjectionModel:
                     avail_now = self.availability.play_probability(report_status, practice_status)
                     effectiveness = self.availability.effectiveness_multiplier(report_status)
 
-                avail = self.availability.future_availability(
-                    rec.position, weeks_ahead, avail_now
-                )
+                avail = self._future_availability(rec.player_id, rec.position, weeks_ahead, avail_now)
 
                 # Shrinkage tuned for ranking leaves the level biased low, by
                 # more early in a season than late. The correction is uniform
@@ -427,6 +430,29 @@ class ProjectionModel:
                 )
 
         return pd.DataFrame(rows)
+
+    def _future_availability(
+        self, player_id: str, position: str, weeks_ahead: int, current: float
+    ) -> float:
+        """P(available) `weeks_ahead` out, from the fitted hazard where possible.
+
+        The injury report still owns week zero -- it is by far the sharpest
+        signal for the game in front of you, and the hazard model is not fitted
+        to beat it there. Beyond that no report exists yet, which is exactly
+        where the fitted chain earns its keep.
+        """
+        if weeks_ahead <= 0:
+            return current
+
+        curves = self.availability_curves
+        if curves is not None and not curves.empty:
+            column = f"h{weeks_ahead}"
+            if column in curves.columns and player_id in curves.index:
+                value = curves.at[player_id, column]
+                if pd.notna(value):
+                    return float(value)
+
+        return self.availability.future_availability(position, weeks_ahead, current)
 
     def _current_team_map(self) -> dict[str, str]:
         """Player -> team, preferring the most recent source available.
