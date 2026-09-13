@@ -42,7 +42,7 @@ import pandas as pd
 import yaml
 
 from .config import LeagueConfig
-from .scoring import score_players
+from .scoring import build_dst_stat_lines, score_dst, score_players
 
 log = logging.getLogger(__name__)
 
@@ -74,14 +74,25 @@ class SeasonData:
 def load_season(season: int, cache_dir: Path, config: LeagueConfig) -> SeasonData:
     """Assemble one season's stats, injuries and true on-field appearances."""
     cache = Path(cache_dir)
+    schedule = pd.read_csv(cache / "games.csv", low_memory=False)
     stats = pd.read_csv(cache / f"stats_player_week_{season}.csv", low_memory=False)
     injuries = pd.read_csv(cache / f"injuries_{season}.csv", low_memory=False)
     snaps = pd.read_csv(cache / f"snap_counts_{season}.csv", low_memory=False)
     roster = pd.read_csv(cache / f"roster_{season}.csv", low_memory=False)
-    schedule = pd.read_csv(cache / "games.csv", low_memory=False)
 
     stats = _regular_season(stats).copy()
     stats["points"] = score_players(stats, config.scoring)
+
+    # Team defenses live at the player level in nflverse but are started as a
+    # unit, so they have to be rolled up or any lineup containing a DEF slot is
+    # silently unbuildable.
+    if "DEF" in config.positions_used:
+        dst = build_dst_stat_lines(stats, schedule)
+        if not dst.empty:
+            dst["points"] = score_dst(dst, config.scoring)
+            keep = ["player_id", "player_display_name", "position", "team", "week", "points"]
+            stats = pd.concat([stats, dst[keep]], ignore_index=True)
+
     injuries = _regular_season(injuries)
 
     # Snap counts key on pro-football-reference ids; the season's own roster is
@@ -331,6 +342,8 @@ def calibrate(
         "effectiveness_given_played": fit_effectiveness(seasons),
         "same_team_correlation": fit_correlations(seasons),
         "common_variance_share": fit_common_variance_share(seasons),
+        "volatility": fit_volatility(seasons),
+        "field_lineups": fit_field_lineups(config, seasons),
     }
     if tune_rates:
         rate_model = tune_rate_model(
@@ -436,23 +449,30 @@ def tune_rate_model(
 # ----------------------------------------------------------------------
 # level calibration
 # ----------------------------------------------------------------------
-# Level calibration was also tried bucketed by how much current-season record a
-# player has. It did reduce the residual level bias (1.33x -> 1.21x at the top of
-# the board in weeks 2-4), but it reorders players within a week according to
-# games played, and that cost 5.6 points a week on the decision metric. Ranking
-# beats level here, so the calibration stays position-only and the residual bias
-# is documented rather than traded for worse lineups.
-EVIDENCE_BUCKETS = ((0, 99),)
+# Level calibration is keyed by the week being projected, not by the individual
+# player's games played. That distinction is the whole trick. Bucketing by a
+# player's own record does fix the level, but it hands two players in the same
+# week different slopes and so reorders them -- which cost 5.6 points a week on
+# the decision metric. A week-keyed map applies the *same* affine transform to
+# everyone in that week, so it cannot change a single lineup decision, while
+# still correcting a bias that is 30% in week 2 and 10% by week 12.
+WEEK_BUCKETS = ((2, 3), (4, 6), (7, 10), (11, 18))
 
 # Calibrate over roughly the pool the optimizer prunes to, per position-week.
 CALIBRATION_CANDIDATES = 45
 
 
-def evidence_bucket(games: float) -> str:
-    for low, high in EVIDENCE_BUCKETS:
-        if low <= games <= high:
+def week_bucket(week: float) -> str:
+    """Which calibration window a week falls into.
+
+    Early in a season a shrunk estimate is far below the truth because the
+    replacement-level prior still dominates; by midseason it is close. One map
+    cannot serve both.
+    """
+    for low, high in WEEK_BUCKETS:
+        if low <= week <= high:
             return f"{low}-{high}"
-    return f"{EVIDENCE_BUCKETS[-1][0]}-{EVIDENCE_BUCKETS[-1][1]}"
+    return f"{WEEK_BUCKETS[-1][0]}-{WEEK_BUCKETS[-1][1]}"
 
 
 def fit_rate_calibration(
@@ -465,7 +485,7 @@ def fit_rate_calibration(
     last_week: int = 17,
 ) -> dict:
     """Linear map from shrunk rate to expected actual points, per position and
-    per amount of evidence.
+    per stage of the season.
 
     Tuning the shrinkage for *ranking* leaves the level badly biased: the blend
     that best separates real starters from replacement bodies pulls everyone
@@ -473,12 +493,15 @@ def fit_rate_calibration(
     but the survival maths compares a lineup total against a cut line in real
     points, so the level has to be right too.
 
-    The bias is not constant -- it depends on how much current-season record a
-    player has, which is why the fit is bucketed by that. Measured over
-    2023-2025 the top of the board came in 33% under in weeks 2-4 and 11% under
-    from week 8, so a single pooled slope cannot fix both ends of the season.
+    The bias is not constant: measured over 2023-2025 the top of the board came
+    in 33% under in weeks 2-4 and 11% under from week 8, because early in a
+    season the replacement-level prior still dominates every estimate. A single
+    pooled slope cannot fix both ends.
 
-    Within a bucket the map is monotone, so it disturbs no ranking.
+    Keying on the week rather than on the player means every player in a given
+    week gets the same affine transform, so the correction is invisible to any
+    within-week ranking and changes no lineup -- it only puts lineup totals and
+    the cut line back on a scale where comparing them means something.
     """
     from .backtest import apply_rate_model, rate_model_inputs
 
@@ -489,9 +512,7 @@ def fit_rate_calibration(
         ):
             frame = rates.copy()
             frame["estimate"] = apply_rate_model(frame, distribution, params)
-            frame["bucket"] = (
-                pd.to_numeric(frame["games_cur"], errors="coerce").fillna(0.0).map(evidence_bucket)
-            )
+            frame["bucket"] = week_bucket(float(frame["week"].iloc[0]))
             for position, group in frame.groupby("position"):
                 if str(position) not in config.positions_used:
                     continue  # linemen and defensive backs are not startable here
@@ -519,5 +540,102 @@ def fit_rate_calibration(
             "slope": round(float(slope), 4),
             "intercept": round(float(intercept), 4),
             "n": int(len(frame)),
+        }
+    return out
+
+
+# ----------------------------------------------------------------------
+# volatility and the opposing field
+# ----------------------------------------------------------------------
+def fit_volatility(seasons: list[SeasonData], min_games: int = 6) -> dict:
+    """Weekly standard deviation as a function of a player's scoring level.
+
+    Carrying a player's raw historical spread alongside a shrunk mean produces
+    nonsense -- a 14-point projection paired with a 13-point standard deviation,
+    when real players at that level run about 7. Measured over 2021-2024 the
+    ratio falls steadily with level (about 1.2 at 2.5 points a game, 0.45 at 20),
+    so spread is fitted as a line in the mean and rebuilt from the calibrated
+    projection rather than inherited.
+    """
+    frames = []
+    for data in seasons:
+        grouped = data.stats.groupby(["player_id", "position"])["points"].agg(
+            ["mean", "std", "count"]
+        )
+        frames.append(grouped[grouped["count"] >= min_games].reset_index())
+    if not frames:
+        return {}
+
+    combined = pd.concat(frames, ignore_index=True).dropna(subset=["std"])
+    out: dict[str, dict] = {}
+    for position, group in combined.groupby("position"):
+        if len(group) < 40 or group["mean"].std() <= 0:
+            continue
+        slope, intercept = np.polyfit(group["mean"], group["std"], 1)
+        out[str(position)] = {
+            "slope": round(float(slope), 4),
+            "intercept": round(float(intercept), 4),
+            "n": int(len(group)),
+        }
+    return out
+
+
+def fit_field_lineups(
+    config: LeagueConfig, seasons: list[SeasonData], depths: tuple[int, ...] = (1, 3, 6, 10, 15, 20)
+) -> dict:
+    """What a manager who fields the k-th best option at each slot actually scores.
+
+    The field model used to be derived from our own projections, which inherited
+    every bias in them: it put a typical opponent at 40 points and the cut line
+    of a twelve-team league at 12, when the real answer is around 100 and 60.
+    Measuring it instead means the cut line no longer depends on the projection
+    model being calibrated.
+
+    Players are chosen by **season-long average**, fixed before any week is
+    scored, so the spread reported is the one a manager who picked in advance
+    actually experiences -- not the artificially stable spread you get by taking
+    the k-th best of each week after the fact.
+    """
+    totals: dict[int, list[float]] = {k: [] for k in depths}
+
+    for data in seasons:
+        stats = data.stats
+        season_mean = stats.groupby(["player_id", "position"])["points"].mean().reset_index()
+        weekly = stats.pivot_table(index="week", columns="player_id", values="points")
+        team_of = stats.sort_values("week").groupby("player_id")["team"].last().to_dict()
+
+        for k in depths:
+            chosen: list[str] = []
+            for slot in config.slots:
+                pool = season_mean[season_mean["position"].isin(slot.eligible)]
+                pool = pool.nlargest(k, "points")
+                if len(pool) < k:
+                    chosen = []
+                    break
+                chosen.append(str(pool["player_id"].iloc[-1]))
+            if not chosen:
+                continue
+            present = [p for p in chosen if p in weekly.columns]
+            if len(present) < len(chosen):
+                continue
+
+            for week in weekly.index:
+                # Skip weeks where any of these players is on bye. A manager
+                # would simply start somebody else; counting the zero both
+                # understates the field and inflates its spread, which drags the
+                # cut line down and makes early weeks look safer than they are.
+                playing = data.teams_by_week.get(int(week), set())
+                if any(team_of.get(p) not in playing for p in present):
+                    continue
+                totals[k].append(float(weekly.loc[week, present].fillna(0.0).sum()))
+
+    out: dict[str, dict] = {}
+    for k, values in totals.items():
+        if len(values) < 30:
+            continue
+        out[str(k)] = {
+            "mean": round(float(np.mean(values)), 2),
+            "sd": round(float(np.std(values, ddof=1)), 2),
+            "n": int(len(values)),
         }
     return out

@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from . import fitted
 from .config import LeagueConfig
 from .data import NflverseClient, current_week
 from .injury import AvailabilityModel
@@ -95,9 +96,13 @@ def calibrate_field(
         log.info("calibrating field from %d observed scores", len(scores))
         return FieldModel(mean=float(scores.mean()), sd=float(scores.std(ddof=1)))
 
-    by_week: dict[int, tuple[float, float]] = {}
     teams = max(2, state.teams_remaining)
 
+    measured = fitted.get().raw.get("field_lineups") or {}
+    if measured:
+        return _measured_field(config, state, weeks, measured, teams)
+
+    by_week: dict[int, tuple[float, float]] = {}
     for week in weeks:
         frame = projections[projections["week"] == week]
         if frame.empty:
@@ -130,6 +135,40 @@ def calibrate_field(
     return FieldModel(
         mean=float(np.mean(means)), sd=float(np.mean(sds)), by_week=by_week
     )
+
+
+def _measured_field(
+    config: LeagueConfig,
+    state: LeagueState,
+    weeks: list[int],
+    measured: dict,
+    teams: int,
+) -> FieldModel:
+    """Field model read off real historical lineups rather than our projections.
+
+    Deriving the opposing field from our own projections inherited every bias in
+    them: a typical opponent came out at 40 points and a twelve-team cut line at
+    12, against measured values near 75 and 45. Reading both off what managers
+    actually scored breaks that circularity -- the cut line no longer depends on
+    the projection model being calibrated.
+
+    Depth `k` is where a median manager sits: half the league is ahead of him,
+    and in a one-use format he slides a slot deeper every week as his own pool
+    drains.
+    """
+    depths = sorted(int(k) for k in measured)
+    by_week: dict[int, tuple[float, float]] = {}
+
+    for week in weeks:
+        depleted = max(0, week - config.survival.as_of_week)
+        k = teams // 2 + depleted
+        nearest = min(depths, key=lambda d: abs(d - k))
+        entry = measured[str(nearest)]
+        by_week[week] = (float(entry["mean"]), float(entry["sd"]))
+
+    means = [m for m, _ in by_week.values()]
+    sds = [s for _, s in by_week.values()]
+    return FieldModel(mean=float(np.mean(means)), sd=float(np.mean(sds)), by_week=by_week)
 
 
 def run(

@@ -250,11 +250,6 @@ class ProjectionModel:
         denominator = n_cur + w_pri + k0
         rates["rate"] = numerator / denominator
 
-        # Shrinkage tuned for ranking leaves the level biased low. Rescale it
-        # back onto real points with a per-position linear map -- monotone, so
-        # no ranking decision changes, but lineup totals become comparable to an
-        # actual cut line again.
-        rates["rate"] = _apply_level_calibration(rates["rate"], rates["position"], n_cur)
 
         # Volatility: a player's own spread once he has enough games, otherwise
         # the position's. Scale it with the player's level so that a 20 ppg back
@@ -394,9 +389,23 @@ class ProjectionModel:
                     rec.position, weeks_ahead, avail_now
                 )
 
+                # Shrinkage tuned for ranking leaves the level biased low, by
+                # more early in a season than late. The correction is uniform
+                # across everyone in this week, so it moves no ranking -- it
+                # only restores a scale on which a lineup total and a cut line
+                # are comparable.
+                calibrated_rate = _calibrate_level(float(rec.rate), rec.position, week)
+
                 multiplier = self._context_multiplier(rec.position, own_total, opp_total)
-                conditional_mean = float(rec.rate) * multiplier * effectiveness
-                conditional_sd = float(rec.sd) * multiplier
+                conditional_mean = calibrated_rate * multiplier * effectiveness
+                # Spread is rebuilt from the calibrated mean rather than carried
+                # over from the player's raw history. Pairing a shrunk 14-point
+                # projection with the 13-point spread of a 24-point player makes
+                # every lineup look far riskier than it is, and the survival
+                # maths is driven by exactly that ratio.
+                conditional_sd = _volatility_for(
+                    conditional_mean, rec.position, fallback=float(rec.sd) * multiplier
+                )
 
                 mean, sd = _mixture_moments(avail, conditional_mean, conditional_sd)
 
@@ -446,28 +455,29 @@ class ProjectionModel:
         return mapping
 
 
-def _apply_level_calibration(
-    rate: pd.Series, position: pd.Series, games_played: pd.Series
-) -> pd.Series:
-    """Map shrunk rates onto the scale of real fantasy points.
+def _volatility_for(mean: float, position: str, *, fallback: float) -> float:
+    """Weekly standard deviation implied by a player's scoring level.
 
-    Keyed by position *and* by how much current-season record the player has,
-    because the shrinkage bias is far larger in week 2 than in week 12.
+    Measured over 2021-2024: the ratio of spread to mean falls steadily with
+    level, from roughly 1.2 at replacement to 0.45 for a 20-point starter.
     """
-    from .calibration import evidence_bucket
+    entry = (fitted.get().raw.get("volatility") or {}).get(position)
+    if not entry:
+        return max(fallback, 1.0)
+    return float(max(entry["slope"] * mean + entry["intercept"], 1.0))
+
+
+def _calibrate_level(rate: float, position: str, week: int) -> float:
+    """Put a shrunk rate back on the scale of real fantasy points."""
+    from .calibration import week_bucket
 
     calibration = fitted.get().raw.get("rate_calibration") or {}
-    if not calibration:
+    entry = calibration.get(f"{position}|{week_bucket(week)}")
+    if not entry:
         return rate
-
-    key = position.astype(str) + "|" + games_played.fillna(0.0).map(evidence_bucket)
-    slopes = {name: entry["slope"] for name, entry in calibration.items()}
-    intercepts = {name: entry["intercept"] for name, entry in calibration.items()}
-    slope = pd.to_numeric(key.map(slopes), errors="coerce").fillna(1.0)
-    intercept = pd.to_numeric(key.map(intercepts), errors="coerce").fillna(0.0)
     # Never return a negative expectation: a player cannot be worse than nothing
     # for lineup purposes, and the optimizer treats <=0 as "not a candidate".
-    return (rate * slope + intercept).clip(lower=0.0)
+    return max(0.0, rate * entry["slope"] + entry["intercept"])
 
 
 def _mask_future_data(
