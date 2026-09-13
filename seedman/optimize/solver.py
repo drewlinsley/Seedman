@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 import pulp
 
+from .. import fitted as _fitted
 from ..config import LeagueConfig
 from ..correlation import lineup_sd
 from ..survival import (
@@ -65,7 +66,13 @@ MAX_PER_GAME_DEFAULT = 3
 # That common component cancels when you are compared against the field -- it
 # moves your score and the cut line together -- so counting it on both sides
 # would understate how decisively a good lineup separates from a bad one.
-COMMON_VARIANCE_SHARE = 0.25
+# Measured at 0.036 over 2021-2024: between-week variance is 13.7 against
+# within-week variance of 371.5. The hand-set 0.25 was a sevenfold overestimate,
+# which made lineups look far more decisively separated from the field than they
+# are, and therefore made every survival probability overconfident.
+COMMON_VARIANCE_SHARE = _fitted.get().value(
+    "common_variance_share", 0.05, label="common_variance_share"
+)
 
 
 @dataclass

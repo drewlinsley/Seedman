@@ -11,9 +11,11 @@ you have to still be alive to spend what you saved.
 
 `seedman` prices that tradeoff instead of guessing at it.
 
-On the current 2026 data, planning weeks 2–12: **40.1%** chance of outlasting the
-field, versus **34.1%** for the same optimizer told to maximise points — bought
-for 6.3 projected points across the horizon.
+Planning weeks 2–12 of 2026, the survival objective gives up 6.3 projected points
+to buy a 6-point jump in modelled survival odds (34.1% → 40.1%). Read that as a
+statement about the objective, not a measured edge: both numbers come from the
+model scoring itself. For measured results against real seasons, see
+[What the backtest says](#what-the-backtest-says) — which is less flattering.
 
 ```
  week  projected    sd  cut_line  survive_pct  teams_alive  point_weight
@@ -52,7 +54,98 @@ seedman league doctor              # what still needs verifying
 
 ---
 
+## What the backtest says
+
+Every season from 2023-2025 was replayed week by week, projecting each week with
+only what was knowable beforehand. `ProjectionModel(through_week=...)` clips the
+inputs once, so no downstream code can reach into the future -- betting lines are
+masked beyond the four weeks a book would have posted, and final scores are
+masked the moment a game has not been played.
+
+**The first version failed this badly.** Its projections ranked players *worse*
+than simply averaging their season to date, at every skill position, in all three
+seasons -- running back rank correlation of 0.35 against the baseline's 0.61.
+The cause was a single bad decision: unknown players were shrunk toward the
+*median startable* player at their position, so every third-stringer projected
+like a real starter. Shrinking toward replacement level instead moved running
+back rank correlation from 0.10 to 0.71 in isolation.
+
+After fitting (2021-2024 for the constants, **2025 never used for anything but
+reporting**):
+
+| held-out 2025 | seedman | season-to-date | prior season | last week |
+|---|---|---|---|---|
+| rank correlation (QB/RB/WR/TE) | **0.558** | 0.521 | — | — |
+| points of the started player | 67.9 | **71.6** | 52.3 | 56.3 |
+
+| in-sample seasons | seedman | season-to-date |
+|---|---|---|
+| 2023 points of started player | **74.3** | 61.7 |
+| 2024 points of started player | **72.4** | 62.7 |
+
+Read that honestly: the model ranks players better than every baseline in every
+season including the held-out one, and it wins the start-the-best-player contest
+handily on the two seasons inside the fit -- but on genuinely held-out 2025 it
+loses that contest to a season-to-date average by 3.7 points a week. The
+top-1 metric is 64 picks a season and swings on a couple of boom weeks, so the
+two measures disagreeing is not shocking. It is also not a result to wave away:
+**on truly unseen data this model is better at ranking and no better at picking.**
+
+Known residual: the top of the board is under-projected by ~32% in weeks 2-4 and
+~14% from week 8. Ranking is unaffected (the bias is common to the whole board)
+and the field calibration uses the same projections, so the survival comparison
+largely cancels it -- but lineup totals read low early in a season. A calibration
+bucketed by games played cuts the early-season bias to 21%, and costs 5.6 points
+a week on the decision metric, so it is not enabled.
+
+Reproduce any of this:
+
+```bash
+seedman backtest --seasons 2023 2024 2025
+seedman backtest --seasons 2025 --simulate     # full survivor-league simulation
+```
+
+## Nothing here is hand-tuned any more
+
+Every constant started as a prior taken from published research or experience.
+Checking them against 2021-2024 found several wrong by large factors:
+
+| constant | hand-set | measured | |
+|---|---|---|---|
+| P(plays \| Doubtful) | 0.06 | **0.0085** | 7x too high — Doubtful means "not playing" |
+| P(plays \| Questionable) | 0.70 | 0.705 | the one I got right |
+| share of variance that is league-wide | 0.25 | **0.036** | 7x too high — made every survival number overconfident |
+| QB↔TE same-team correlation | 0.25 | 0.328 | understated the stacking penalty |
+| shrinkage target | median starter | **5th percentile** | the bug that broke the whole ranking |
+
+Two measurement traps worth knowing about, because both produced confident
+nonsense before they were caught:
+
+* **"Played" cannot mean "appears in the weekly stat file."** That file only
+  lists players who recorded something, so a receiver who ran twelve routes
+  without a target is indistinguishable from one who was inactive. Snap counts
+  are the real signal, joined through the *season's own* roster — a later
+  roster has already lost everyone who retired.
+* **Availability has to be conditioned on having played the previous week.**
+  Without it the denominator fills with players on injured reserve, not yet
+  debuted, or not on an NFL roster at all, and a true 92% reads as 70%.
+
+There is also a distinction the first version collapsed: a player the team never
+listed is not the same as one listed with a practice line but no game status.
+Counterintuitively the second is *more* likely to play (0.953 vs 0.920) — being
+listed and left undesignated means the team actively cleared him.
+
+```bash
+seedman calibrate --fit 2021 2022 2023 2024 --validate 2025 --tune-rates
+```
+
+writes `configs/fitted.yaml`. Buckets thinner than 60 observations keep their
+prior rather than trusting a point estimate off three cases, and every value
+records which it was.
+
 ## Read this before you trust a lineup
+
+
 
 **The league site is not wired up.** `https://rocco-siffredi.onrender.com` is
 blocked by the network egress policy of the environment this was written in, so
@@ -203,18 +296,27 @@ each week on a rolling horizon, this costs nothing in practice.
 seedman/
   config.py         league rules: scoring, roster shape, survival format
   scoring.py        component stats -> fantasy points under your rules
-  projections.py    shrunk rates x Vegas context x availability
+  projections.py    shrunk rates x Vegas context x availability, with the
+                    through_week clip that makes backtesting honest
   injury.py         designation -> P(plays), and future-week decay
   correlation.py    same-team / same-game covariance
   survival.py       cut-line distribution and the marginal value of a point
+  calibration.py    fits every constant from historical seasons
+  fitted.py         loads fitted values, keeps priors where samples are thin
+  backtest.py       week-by-week replay, baselines, league simulation
   optimize/solver.py   the MILP and the reweighting loop
   league/           manual adapter, name resolution, site probe
   pipeline.py       data -> projections -> field calibration -> plan
   cli.py
 configs/league.yaml  ** edit this first **
-tests/               63 tests, no network required
+configs/fitted.yaml  produced by `seedman calibrate`; do not hand-edit
+tests/               86 tests, no network required
 ```
 
 ```bash
-python -m pytest      # 63 passed
+python -m pytest      # 86 passed
 ```
+
+`tests/test_leakage.py` is the one to read first. A backtest that leaks produces
+confident numbers justifying a broken model, so the guard is tested directly: a
+monster week 6 must not move the week-4 projection by a thousandth of a point.

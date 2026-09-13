@@ -92,6 +92,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p_opt.add_argument("--csv", type=Path, default=None, help="write the plan to CSV")
     p_opt.set_defaults(handler=cmd_optimize)
 
+    p_cal = sub.add_parser("calibrate", help="fit model constants from historical seasons")
+    p_cal.add_argument("--fit", type=int, nargs="+", default=[2021, 2022, 2023, 2024],
+                       help="seasons to fit on (hold the newest out)")
+    p_cal.add_argument("--validate", type=int, default=None,
+                       help="season to report but never optimise against")
+    p_cal.add_argument("--tune-rates", action="store_true",
+                       help="also grid-search the shrinkage hyperparameters (slow)")
+    p_cal.add_argument("--out", type=Path, default=Path("configs/fitted.yaml"))
+    p_cal.set_defaults(handler=cmd_calibrate)
+
+    p_bt = sub.add_parser("backtest", help="replay seasons and score the projections")
+    p_bt.add_argument("--seasons", type=int, nargs="+", default=[2023, 2024, 2025])
+    p_bt.add_argument("--simulate", action="store_true",
+                      help="also simulate full survivor seasons (slow)")
+    p_bt.add_argument("--replications", type=int, default=300)
+    p_bt.add_argument("--teams", type=int, default=12)
+    p_bt.set_defaults(handler=cmd_backtest)
+
     p_league = sub.add_parser("league", help="league state helpers")
     league_sub = p_league.add_subparsers(dest="league_command", required=True)
 
@@ -271,6 +289,94 @@ def _print_plan(plan, config: LeagueConfig) -> None:
     for wp in plan.weeks[1:]:
         names = ", ".join(f"{p['slot']}:{p['name']}" for p in wp.picks)
         print(f"  week {wp.week:>2}: {names}")
+
+
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from .calibration import calibrate, write_calibration
+
+    config = _load_config(args)
+    if args.validate in args.fit:
+        print(
+            f"error: season {args.validate} is in --fit; a validation season must be held out",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"fitting on {args.fit}" + (f", validating on {args.validate}" if args.validate else ""))
+    result = calibrate(
+        config,
+        args.fit,
+        args.cache,
+        tune_rates=args.tune_rates,
+        validate_season=args.validate,
+    )
+    write_calibration(result, args.out)
+
+    print(f"\nwrote {args.out}\n")
+    availability = result.get("availability", {}).get("by_report_status", {})
+    for status, entry in sorted(availability.items(), key=lambda kv: kv[1]["value"]):
+        print(f"  P(plays | {status:<16}) = {entry['value']:.4f}   (n={entry['n']:,})")
+    rate = result.get("rate_model")
+    if rate:
+        print(
+            f"\n  rate model: fit {rate['fit_score_points_per_start']} pts/start"
+            + (
+                f", held-out {rate['validation_season']}: "
+                f"{rate['validation_points_per_start']} pts/start"
+                if "validation_points_per_start" in rate
+                else ""
+            )
+        )
+    return 0
+
+
+def cmd_backtest(args: argparse.Namespace) -> int:
+    from .backtest import (
+        accuracy_table,
+        evaluate_strategies,
+        replay_projections,
+        run_strategies,
+        start_the_best_table,
+    )
+
+    config = _load_config(args)
+    methods = ["mean", "season_to_date", "prior_season", "last_week"]
+
+    for season in args.seasons:
+        result = replay_projections(config, season, cache_dir=args.cache)
+        if result.rows.empty:
+            print(f"season {season}: no data", file=sys.stderr)
+            continue
+
+        print(f"\n{'=' * 76}\nSEASON {season}  ({len(result.rows):,} player-weeks)\n{'=' * 76}")
+        accuracy = accuracy_table(result.rows, methods)
+        print("\nrank correlation within position-week (higher is better):")
+        print(
+            accuracy.pivot(index="position", columns="method", values="rank_rho")
+            .reindex(columns=methods)
+            .round(4)
+            .to_string()
+        )
+        print("\nactual points of the player each method says to start:")
+        decision = start_the_best_table(result.rows, methods)
+        print(
+            decision.pivot(index="position", columns="method", values="avg_points_of_pick")
+            .reindex(columns=methods)
+            .round(2)
+            .to_string()
+        )
+
+        if args.simulate:
+            runs, frames, truth = run_strategies(config, season, cache_dir=args.cache,
+                                                 teams=args.teams)
+            table = evaluate_strategies(config, runs, frames, truth, teams=args.teams,
+                                        replications=args.replications, seed=season * 1000)
+            print(f"\nsurvivor-league simulation ({args.replications} fields, "
+                  f"{args.teams} teams):")
+            print(table.to_string(index=False))
+
+    print("\n'mean' is this model. It has to beat the other three to be worth running.")
+    return 0
 
 
 def cmd_league_init(args: argparse.Namespace) -> int:

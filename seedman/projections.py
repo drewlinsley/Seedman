@@ -33,24 +33,50 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from . import fitted
 from .config import LeagueConfig
-from .injury import AvailabilityModel, _clean, latest_injury_report
+from .injury import NOT_ON_REPORT, AvailabilityModel, _clean, latest_injury_report
 from .scoring import build_dst_stat_lines, score_dst, score_players
 
-# Fallback per-game baselines (PPR-ish) used only when no prior season is
-# available to fit them from. Overwritten by fitted values whenever possible.
-FALLBACK_POSITION_MEAN = {"QB": 15.0, "RB": 9.0, "WR": 8.5, "TE": 6.5, "K": 8.0, "DEF": 7.0}
+# Replacement-level per-game scoring, used when a player has little or no
+# current-season record. Getting this wrong is expensive: an earlier version
+# shrank unknown players toward the *median startable* player at their position,
+# which handed every third-stringer a projection in line with a real starter and
+# collapsed running-back rank correlation from 0.71 to 0.10. The prior a player
+# with no evidence deserves is replacement level, not average-starter level.
+FALLBACK_POSITION_MEAN = {"QB": 8.0, "RB": 3.5, "WR": 3.5, "TE": 2.5, "K": 6.0, "DEF": 5.0}
 FALLBACK_POSITION_SD = {"QB": 7.0, "RB": 6.5, "WR": 6.8, "TE": 5.2, "K": 4.0, "DEF": 6.0}
 
-# Empirical-Bayes weights, in units of "games of evidence".
-PRIOR_SEASON_DISCOUNT = 0.5  # last season counts half as much as this season
-PRIOR_SEASON_MAX_GAMES = 14
-POSITION_PRIOR_WEIGHT = 3.0
+# Empirical-Bayes weights, in "games of evidence". Tuned on 2023-2024 and
+# validated on 2025 by `seedman calibrate --tune`; overridden by fitted.yaml.
+# The surface is flat near the optimum -- anything with a low replacement
+# quantile and a modest weight performs within noise of the best.
+PRIOR_SEASON_WEIGHT = 2.0  # how much last season is worth once this one starts
+REPLACEMENT_WEIGHT = 3.0  # pull toward replacement level for thin records
+REPLACEMENT_QUANTILE = 0.20  # which percentile of a position counts as replacement
 
 # How strongly player output tracks the team's implied total.
 CONTEXT_EXPONENT = {"QB": 0.70, "RB": 0.65, "WR": 0.75, "TE": 0.70, "K": 0.50, "DEF": 1.00}
 DEFAULT_CONTEXT_EXPONENT = 0.70
 CONTEXT_CLAMP = (0.75, 1.30)
+
+# Sportsbooks post lines roughly four weeks ahead. Live, the later weeks simply
+# have no line yet; in a backtest the historical file has every line filled in,
+# so they must be masked or the model gets to see the future.
+LINE_LOOKAHEAD_WEEKS = 4
+
+
+def _rate_hyperparameters() -> tuple[float, float, float]:
+    """Prior-season weight, replacement weight and replacement quantile."""
+    constants = fitted.get()
+    return (
+        constants.value("rate_model.prior_season_weight", PRIOR_SEASON_WEIGHT,
+                        label="rate.prior_season_weight"),
+        constants.value("rate_model.replacement_weight", REPLACEMENT_WEIGHT,
+                        label="rate.replacement_weight"),
+        constants.value("rate_model.replacement_quantile", REPLACEMENT_QUANTILE,
+                        label="rate.replacement_quantile"),
+    )
 
 
 @dataclass
@@ -84,12 +110,33 @@ class ProjectionModel:
         injuries: pd.DataFrame,
         rosters: pd.DataFrame,
         availability_model: AvailabilityModel | None = None,
+        through_week: int | None = None,
     ) -> None:
         self.config = config
-        self.schedule = schedule
         self.injuries = injuries
         self.rosters = rosters
         self.availability = availability_model or AvailabilityModel()
+        self.through_week = through_week
+
+        # Everything the model is allowed to see is clipped here, once, so that
+        # no downstream method can accidentally reach into the future. Live this
+        # is a no-op (the data simply stops at today); in a backtest it is the
+        # difference between a real result and a fantasy.
+        if through_week is not None:
+            weekly_current = weekly_current[weekly_current["week"] <= through_week]
+            schedule = _mask_future_data(
+                schedule,
+                config.season,
+                lines_through=through_week + LINE_LOOKAHEAD_WEEKS,
+                scores_through=through_week,
+            )
+        self.schedule = schedule
+
+        (
+            self._prior_season_weight,
+            self._replacement_weight,
+            self._replacement_quantile,
+        ) = _rate_hyperparameters()
 
         self.current = self._prepare(weekly_current)
         self.prior = self._prepare(weekly_prior)
@@ -120,16 +167,23 @@ class ProjectionModel:
         return frame
 
     def _fit_position_priors(self) -> tuple[dict[str, float], dict[str, float]]:
-        """Estimate per-position mean and SD from whatever history we have.
+        """Replacement-level scoring rate and typical volatility, per position.
 
-        Fitting beats hard-coding, but only over *startable* players: averaging
-        in every third-stringer who logged one snap would drag the baseline to
-        near zero and make the shrinkage prior useless.
+        Replacement level is a low quantile of the per-player season averages,
+        not the average of the good ones. It is the number a player about whom
+        we know nothing should regress to, and the whole ranking depends on it
+        being low.
         """
         means = dict(FALLBACK_POSITION_MEAN)
         sds = dict(FALLBACK_POSITION_SD)
 
-        history = self.prior if not self.prior.empty else self.current
+        # Prior seasons are always safe to fit on. Falling back to the current
+        # season is only legitimate when nothing is being withheld.
+        history = self.prior
+        if history.empty:
+            if self.through_week is not None:
+                return means, sds
+            history = self.current
         if history.empty:
             return means, sds
 
@@ -137,29 +191,29 @@ class ProjectionModel:
             if position not in means:
                 continue
             per_player = group.groupby("player_id")["points"].agg(["mean", "count"])
-            # Startable-ish: at least 4 appearances, top half by scoring rate.
+            # Require a few appearances so that one-game cameos do not define
+            # the replacement level.
             eligible = per_player[per_player["count"] >= 4]
             if len(eligible) < 5:
                 continue
-            cutoff = eligible["mean"].quantile(0.5)
-            starters = eligible[eligible["mean"] >= cutoff]
-            if starters.empty:
-                continue
-            means[position] = float(starters["mean"].mean())
+            means[position] = float(eligible["mean"].quantile(self._replacement_quantile))
 
-            weekly_sd = group[group["player_id"].isin(starters.index)].groupby("player_id")[
-                "points"
-            ].std()
-            weekly_sd = weekly_sd.dropna()
+            weekly_sd = group.groupby("player_id")["points"].std().dropna()
             if not weekly_sd.empty:
                 sds[position] = float(weekly_sd.mean())
 
         return means, sds
 
     def _average_implied_total(self) -> float:
+        """League-average implied team total, used to normalise game context."""
         season = self.config.season
         games = self.schedule[self.schedule["season"] == season]
         totals = pd.to_numeric(games["total_line"], errors="coerce").dropna()
+        if totals.empty:
+            # Early in a season no line is posted yet; the previous season's
+            # scoring environment is the best available stand-in.
+            previous = self.schedule[self.schedule["season"] == season - 1]
+            totals = pd.to_numeric(previous["total_line"], errors="coerce").dropna()
         if totals.empty:
             return 22.5
         return float(totals.mean() / 2.0)
@@ -183,20 +237,35 @@ class ProjectionModel:
 
         n_cur = rates["games_cur"].fillna(0.0)
         r_cur = rates["mean_cur"].fillna(0.0)
-        n_pri_raw = rates["games_pri"].fillna(0.0).clip(upper=PRIOR_SEASON_MAX_GAMES)
-        m_pri = n_pri_raw * PRIOR_SEASON_DISCOUNT
+        n_pri = rates["games_pri"].fillna(0.0)
         r_pri = rates["mean_pri"].fillna(0.0)
 
-        numerator = n_cur * r_cur + m_pri * r_pri + POSITION_PRIOR_WEIGHT * pos_mean
-        denominator = n_cur + m_pri + POSITION_PRIOR_WEIGHT
+        # Last season counts as a fixed quantum of evidence rather than one
+        # scaled by how many games it contained, so its influence fades
+        # naturally as the current season accumulates.
+        w_pri = np.where(n_pri > 0, self._prior_season_weight, 0.0)
+        k0 = self._replacement_weight
+
+        numerator = n_cur * r_cur + w_pri * r_pri + k0 * pos_mean
+        denominator = n_cur + w_pri + k0
         rates["rate"] = numerator / denominator
+
+        # Shrinkage tuned for ranking leaves the level biased low. Rescale it
+        # back onto real points with a per-position linear map -- monotone, so
+        # no ranking decision changes, but lineup totals become comparable to an
+        # actual cut line again.
+        rates["rate"] = _apply_level_calibration(rates["rate"], rates["position"], n_cur)
 
         # Volatility: a player's own spread once he has enough games, otherwise
         # the position's. Scale it with the player's level so that a 20 ppg back
         # is not handed a replacement-level standard deviation.
         own_sd = rates[["sd_cur", "sd_pri"]].mean(axis=1)
-        enough = (n_cur + n_pri_raw) >= 5
-        scaled_pos_sd = pos_sd * (rates["rate"] / pos_mean).clip(0.5, 1.8)
+        enough = (n_cur + n_pri) >= 5
+        # Scale volatility with the player's level, against the position's
+        # median rate rather than replacement level (which is near zero and
+        # would blow the ratio up).
+        median_rate = rates.groupby("position")["rate"].transform("median").clip(lower=1.0)
+        scaled_pos_sd = pos_sd * (rates["rate"] / median_rate).clip(0.5, 1.8)
         rates["sd"] = np.where(enough & own_sd.notna(), own_sd, scaled_pos_sd)
         rates["sd"] = pd.to_numeric(rates["sd"], errors="coerce").fillna(pos_sd).clip(lower=1.0)
 
@@ -300,10 +369,17 @@ class ProjectionModel:
                 own_total = float(spot["implied_total"])
                 opp_total = float(spot.get("opponent_implied_total", np.nan))
 
-                # `.get` can hand back a NaN that pandas stored for a blank
-                # cell, so normalise rather than trusting the dict value.
-                report_status = _clean(status.get(rec.player_id, ""))
-                practice_status = _clean(practice.get(rec.player_id, ""))
+                # Absent from the report entirely is a different state from
+                # listed-without-a-game-status, and they have different play
+                # rates, so they must not collapse to the same blank string.
+                # (`.get` can also hand back a NaN pandas stored for a blank
+                # cell, hence the normalise.)
+                if rec.player_id in status:
+                    report_status = _clean(status[rec.player_id]) or "(none)"
+                    practice_status = _clean(practice.get(rec.player_id, ""))
+                else:
+                    report_status = NOT_ON_REPORT
+                    practice_status = ""
 
                 if rec.position == "DEF":
                     # A unit is never "questionable"; individual injuries are
@@ -337,7 +413,7 @@ class ProjectionModel:
                         "conditional_mean": conditional_mean,
                         "opponent": str(spot["opponent"]),
                         "implied_team_total": own_total,
-                        "report_status": report_status or "",
+                        "report_status": "" if report_status in (NOT_ON_REPORT, "(none)") else report_status,
                     }
                 )
 
@@ -368,6 +444,51 @@ class ProjectionModel:
         for team in set(mapping.values()):
             mapping[f"DEF_{team}"] = team
         return mapping
+
+
+def _apply_level_calibration(
+    rate: pd.Series, position: pd.Series, games_played: pd.Series
+) -> pd.Series:
+    """Map shrunk rates onto the scale of real fantasy points.
+
+    Keyed by position *and* by how much current-season record the player has,
+    because the shrinkage bias is far larger in week 2 than in week 12.
+    """
+    from .calibration import evidence_bucket
+
+    calibration = fitted.get().raw.get("rate_calibration") or {}
+    if not calibration:
+        return rate
+
+    key = position.astype(str) + "|" + games_played.fillna(0.0).map(evidence_bucket)
+    slopes = {name: entry["slope"] for name, entry in calibration.items()}
+    intercepts = {name: entry["intercept"] for name, entry in calibration.items()}
+    slope = pd.to_numeric(key.map(slopes), errors="coerce").fillna(1.0)
+    intercept = pd.to_numeric(key.map(intercepts), errors="coerce").fillna(0.0)
+    # Never return a negative expectation: a player cannot be worse than nothing
+    # for lineup purposes, and the optimizer treats <=0 as "not a candidate".
+    return (rate * slope + intercept).clip(lower=0.0)
+
+
+def _mask_future_data(
+    schedule: pd.DataFrame, season: int, *, lines_through: int, scores_through: int
+) -> pd.DataFrame:
+    """Hide anything that would not have been knowable yet.
+
+    Two different horizons, and conflating them is a subtle way to leak: a
+    sportsbook posts lines several weeks ahead, but a final score is only known
+    once the game has actually been played.
+    """
+    masked = schedule.copy()
+    in_season = masked["season"] == season
+
+    masked.loc[in_season & (masked["week"] > lines_through), ["spread_line", "total_line"]] = np.nan
+    # Final scores feed the points-allowed table behind team-defense scoring.
+    masked.loc[
+        in_season & (masked["week"] > scores_through),
+        ["home_score", "away_score", "result", "total"],
+    ] = np.nan
+    return masked
 
 
 def _mixture_moments(availability: float, mean: float, sd: float) -> tuple[float, float]:

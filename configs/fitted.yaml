@@ -1,0 +1,138 @@
+# Fitted from historical nflverse data by `seedman calibrate`.
+# Do not hand-edit: re-run the command instead.
+# Fitted on seasons [2021, 2022, 2023, 2024]; keep later seasons out of the fit
+# so they remain an honest validation set.
+generated: '2026-09-13'
+fitted_on:
+- 2021
+- 2022
+- 2023
+- 2024
+min_sample_for_use: 60
+availability:
+  by_report_status:
+    (none):
+      value: 0.9535
+      n: 2428
+    Doubtful:
+      value: 0.0085
+      n: 117
+    Note:
+      value: 1.0
+      n: 2
+    Out:
+      value: 0.002
+      n: 502
+    Questionable:
+      value: 0.705
+      n: 949
+    not on report:
+      value: 0.92
+      n: 16467
+  questionable_by_practice:
+    (none):
+      value: 0.7222
+      n: 18
+    Did Not Participate In Practice:
+      value: 0.4641
+      n: 209
+    Full Participation in Practice:
+      value: 0.8246
+      n: 114
+    Limited Participation in Practice:
+      value: 0.7648
+      n: 608
+  undesignated_by_practice:
+    Did Not Participate In Practice:
+      value: 0.8225
+      n: 276
+    Full Participation in Practice:
+      value: 0.9735
+      n: 1739
+    Limited Participation in Practice:
+      value: 0.9564
+      n: 413
+  sample_size: 20465
+effectiveness_given_played:
+  (none):
+    value: 0.9473
+    n: 2592
+  Doubtful:
+    value: 0.3974
+    n: 1
+  Note:
+    value: 1.446
+    n: 1
+  Out:
+    value: 1.2136
+    n: 1
+  Questionable:
+    value: 0.864
+    n: 921
+same_team_correlation:
+  QB|RB:
+    value: 0.0834
+    n: 1653
+  QB|WR:
+    value: 0.3797
+    n: 1700
+  QB|TE:
+    value: 0.3281
+    n: 1578
+  RB|WR:
+    value: 0.0086
+    n: 1810
+  RB|TE:
+    value: -0.0111
+    n: 1683
+  WR|TE:
+    value: 0.007
+    n: 1721
+common_variance_share:
+  value: 0.0355
+  between_week_variance: 13.67
+  within_week_variance: 371.53
+  n: 2174
+rate_model:
+  prior_season_weight:
+    value: 4.0
+    n: 64
+  replacement_weight:
+    value: 5.0
+    n: 64
+  replacement_quantile:
+    value: 0.05
+    n: 64
+  fit_score_points_per_start: 18.443
+  fit_seasons:
+  - 2021
+  - 2022
+  - 2023
+  - 2024
+  validation_season: 2025
+  validation_points_per_start: 17.559
+rate_calibration:
+  DEF|0-99:
+    slope: 0.3613
+    intercept: 3.9675
+    n: 2048
+  K|0-99:
+    slope: 0.9922
+    intercept: -1.2524
+    n: 2786
+  QB|0-99:
+    slope: 1.3389
+    intercept: -3.7011
+    n: 2870
+  RB|0-99:
+    slope: 0.9039
+    intercept: 1.9524
+    n: 2880
+  TE|0-99:
+    slope: 1.112
+    intercept: -0.3079
+    n: 2880
+  WR|0-99:
+    slope: 0.8004
+    intercept: 3.3406
+    n: 2880

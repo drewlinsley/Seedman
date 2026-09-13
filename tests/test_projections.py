@@ -76,11 +76,46 @@ def test_players_on_bye_get_no_projection(config: LeagueConfig):
 
 
 def test_one_hot_game_barely_moves_a_shrunk_rate(model):
-    """Early in a season the prior must dominate a single week of evidence."""
+    """Early in a season the prior must dominate a single week of evidence.
+
+    One game at 10.0 ppg, a prior season at 8.0, and a replacement level well
+    below both: 1 game of current evidence cannot drag the estimate up to 10.
+    """
     rates = model._player_rates().set_index("player_id")
-    rate = rates.loc["00-0000001", "rate"]
-    # Current season says 10.0 ppg, prior season says 8.0, position prior is lower.
-    assert 7.0 < rate < 9.0
+    rate = float(rates.loc["00-0000001", "rate"])
+    assert rate < 10.0, "a single good game should not pull the estimate up to it"
+    assert rate > 4.0, "a genuine contributor should still clear replacement level"
+
+
+def test_unknown_players_regress_to_replacement_not_to_a_starter(config: LeagueConfig):
+    """The bug this guards against collapsed RB rank correlation from 0.71 to 0.10.
+
+    A player with no record at all must land near replacement level. If he lands
+    near the median startable player, hundreds of third-stringers outrank real
+    starters and the whole ranking is worthless.
+    """
+    prior = pd.concat(
+        [
+            _weekly({w: yards for w in range(1, 15)})
+            .assign(player_id=f"00-000{i:04d}", player_display_name=f"P{i}")
+            for i, yards in enumerate([200, 160, 120, 90, 70, 50, 30, 20, 10, 5])
+        ],
+        ignore_index=True,
+    )
+    model = ProjectionModel(
+        config,
+        weekly_current=pd.DataFrame(),
+        weekly_prior=prior,
+        schedule=SCHEDULE,
+        injuries=pd.DataFrame(),
+        rosters=pd.DataFrame(),
+    )
+    starters = prior.groupby("player_id").size()
+    assert len(starters) == 10
+    replacement = model.position_mean["WR"]
+    # Ten players averaging 20.0 down to 0.5 ppg: the median is ~6, replacement
+    # must sit well below that.
+    assert replacement < 5.0
 
 
 def test_injury_report_cuts_the_projection(config: LeagueConfig):

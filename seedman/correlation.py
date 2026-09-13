@@ -34,8 +34,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from . import fitted
+
 # Correlation between two players on the SAME NFL team, keyed by position pair.
-SAME_TEAM: dict[tuple[str, str], float] = {
+SAME_TEAM_PRIOR: dict[tuple[str, str], float] = {
     # A quarterback and his own pass catchers: the same completion scores twice.
     ("QB", "WR"): 0.35,
     ("QB", "TE"): 0.25,
@@ -65,6 +67,38 @@ SAME_TEAM: dict[tuple[str, str], float] = {
 # Correlation between two players on OPPOSITE teams in the same game.
 OPPOSING_TEAM_DEFAULT = 0.10  # shootouts lift both offenses
 OPPOSING_DEFENSE = -0.25  # a defense and the offense it is facing
+
+
+def _resolve_same_team() -> dict[tuple[str, str], float]:
+    """Fitted same-team coefficients where measured, priors elsewhere.
+
+    Only the skill-position pairs are measurable from stat lines; kicker and
+    defense pairings keep their priors.
+    """
+    constants = fitted.get()
+    out = dict(SAME_TEAM_PRIOR)
+    for (a, b), prior in SAME_TEAM_PRIOR.items():
+        for key in (f"{a}|{b}", f"{b}|{a}"):
+            if f"same_team_correlation.{key}" in _flatten(constants.raw):
+                out[(a, b)] = constants.value(
+                    f"same_team_correlation.{key}", prior, label=f"corr[{a}-{b}]"
+                )
+                break
+    return out
+
+
+def _flatten(node, prefix="") -> set[str]:
+    """Dotted paths present in the fitted file, for membership checks."""
+    keys: set[str] = set()
+    if isinstance(node, dict):
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else str(key)
+            keys.add(path)
+            keys |= _flatten(value, path)
+    return keys
+
+
+SAME_TEAM = _resolve_same_team()
 
 
 def pair_correlation(
