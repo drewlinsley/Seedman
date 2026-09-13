@@ -20,7 +20,7 @@ survival:
 
   # [ASSUMED] Teams still alive, including you, as of `as_of_week`.
   teams_remaining: 12
-  as_of_week: 2
+  as_of_week: 1
 
   # [ASSUMED] How many teams get cut each week.
   eliminations_per_week: 1
@@ -29,14 +29,16 @@ survival:
   final_week: 17
 
 roster:
-  # [ASSUMED] Standard survivor lineup: one of each, no bench.
+  # [CONFIRMED from the league site, week 1 lineup screen] Six slots, no bench,
+  # no kicker and no team defense. Two separate WR slots plus a flex.
   slots:
-    - {name: QB,  eligible: [QB]}
-    - {name: RB,  eligible: [RB]}
-    - {name: WR,  eligible: [WR]}
-    - {name: TE,  eligible: [TE]}
-    - {name: K,   eligible: [K]}
-    - {name: DEF, eligible: [DEF]}
+    - {name: QB,   eligible: [QB]}
+    - {name: RB,   eligible: [RB]}
+    - {name: WR1,  eligible: [WR]}
+    - {name: WR2,  eligible: [WR]}
+    - {name: TE,   eligible: [TE]}
+    # [ASSUMED] Flex seen holding a WR; RB/WR/TE is the near-universal rule.
+    - {name: FLEX, eligible: [RB, WR, TE]}
 
 scoring:
   # [ASSUMED] Full PPR. Set `receptions: 0.5` for half-PPR or `0` for standard.
@@ -52,47 +54,17 @@ scoring:
   two_point_conversions: 2
   special_teams_tds: 6
 
-  # Kicker
-  pat_made: 1
-  fg_made_0_19: 3
-  fg_made_20_29: 3
-  fg_made_30_39: 3
-  fg_made_40_49: 4
-  fg_made_50_59: 5
-  fg_made_60_: 5
-  fg_missed: -1
-
   # [ASSUMED] Common yardage bonuses; delete this block if your league has none.
   bonuses:
     - {stat: passing_yards,   threshold: 300, points: 3}
     - {stat: rushing_yards,   threshold: 100, points: 3}
     - {stat: receiving_yards, threshold: 100, points: 3}
 
-  # Team defense / special teams
-  dst:
-    def_sacks: 1
-    def_interceptions: 2
-    fumble_recovery_opp: 2
-    def_tds: 6
-    def_safeties: 2
-    special_teams_tds: 6
-    def_punt_blocks: 2
-    def_fg_blocks: 2
-
-  # Points-allowed tiers, evaluated in order: first tier whose
-  # `max_points_allowed` is >= actual points allowed wins.
-  dst_points_allowed_tiers:
-    - {max_points_allowed: 0,   points: 10}
-    - {max_points_allowed: 6,   points: 7}
-    - {max_points_allowed: 13,  points: 4}
-    - {max_points_allowed: 20,  points: 1}
-    - {max_points_allowed: 27,  points: 0}
-    - {max_points_allowed: 34,  points: -1}
-    - {max_points_allowed: 999, points: -4}
 
 # Surfaced in every report so stale guesses cannot quietly drive decisions.
 assumptions:
-  - "Scoring is full PPR with 300/100/100 yardage bonuses — NOT verified against the league site."
-  - "Lineup is QB/RB/WR/TE/K/DEF with no bench or FLEX — NOT verified."
+  - "Scoring is full PPR with 300/100/100 yardage bonuses — STILL NOT verified. This is the big one."
+  - "Lineup CONFIRMED from the league site: QB/RB/WR/WR/TE/FLEX, no kicker, no defense."
+  - "FLEX assumed to accept RB/WR/TE — seen holding a WR, the rest is convention."
   - "12 teams alive as of week 2, one elimination per week, through week 17 — NOT verified."
   - "Each player is usable exactly once per season (player_reuse_limit: 1)."

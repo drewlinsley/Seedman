@@ -520,7 +520,7 @@ def rate_model_inputs(
     season: int,
     *,
     cache_dir: Path | str = ".cache/nflverse",
-    first_week: int = 2,
+    first_week: int = 1,
     last_week: int = 17,
 ) -> list[tuple[pd.DataFrame, dict[str, pd.Series]]]:
     """Per-week raw ingredients for the shrinkage blend, plus what happened.
@@ -549,7 +549,10 @@ def rate_model_inputs(
             rosters=rosters,
             through_week=week - 1,
         )
-        rates = model._player_rates()[
+        rates = model._player_rates()
+        if rates.empty:
+            continue
+        rates = rates[
             ["player_id", "position", "games_cur", "mean_cur", "games_pri", "mean_pri"]
         ].copy()
         week_truth = truth[truth["week"] == week][["player_id", "actual"]]
@@ -600,6 +603,8 @@ def score_rate_model(
     """Average actual points of the player these parameters say to start."""
     picked = []
     for rates, distribution in inputs:
+        if rates.empty:
+            continue
         frame = rates.copy()
         frame["estimate"] = apply_rate_model(frame, distribution, params)
         for position, group in frame.groupby("position"):

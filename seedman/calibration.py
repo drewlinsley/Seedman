@@ -397,7 +397,7 @@ def tune_rate_model(
     *,
     cache_dir: Path,
     validate_season: int | None = None,
-    first_week: int = 2,
+    first_week: int = 1,
     last_week: int = 17,
 ) -> dict:
     """Grid-search the shrinkage hyperparameters on `fit_seasons`.
@@ -461,7 +461,7 @@ def tune_rate_model(
 # the decision metric. A week-keyed map applies the *same* affine transform to
 # everyone in that week, so it cannot change a single lineup decision, while
 # still correcting a bias that is 30% in week 2 and 10% by week 12.
-WEEK_BUCKETS = ((2, 3), (4, 6), (7, 10), (11, 18))
+WEEK_BUCKETS = ((1, 3), (4, 6), (7, 10), (11, 18))
 
 # Calibrate over roughly the pool the optimizer prunes to, per position-week.
 CALIBRATION_CANDIDATES = 45
@@ -477,7 +477,13 @@ def week_bucket(week: float) -> str:
     for low, high in WEEK_BUCKETS:
         if low <= week <= high:
             return f"{low}-{high}"
-    return f"{WEEK_BUCKETS[-1][0]}-{WEEK_BUCKETS[-1][1]}"
+    # Clamp rather than fall through. An out-of-range week used to land in the
+    # *last* bucket, so week 1 -- the week with the least current-season
+    # evidence and therefore the steepest correction -- was being handed the
+    # late-season map, which is the flattest one.
+    first, last = WEEK_BUCKETS[0], WEEK_BUCKETS[-1]
+    chosen = first if week < first[0] else last
+    return f"{chosen[0]}-{chosen[1]}"
 
 
 def fit_rate_calibration(
@@ -486,7 +492,7 @@ def fit_rate_calibration(
     *,
     cache_dir: Path,
     params: dict,
-    first_week: int = 2,
+    first_week: int = 1,
     last_week: int = 17,
 ) -> dict:
     """Linear map from shrunk rate to expected actual points, per position and
@@ -515,6 +521,8 @@ def fit_rate_calibration(
         for rates, distribution in rate_model_inputs(
             config, season, cache_dir=cache_dir, first_week=first_week, last_week=last_week
         ):
+            if rates.empty:
+                continue  # week 1 of a season with no prior-season file
             frame = rates.copy()
             frame["estimate"] = apply_rate_model(frame, distribution, params)
             frame["bucket"] = week_bucket(float(frame["week"].iloc[0]))

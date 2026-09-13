@@ -47,6 +47,11 @@ def test_shipped_league_config_is_valid():
 
     cfg = LeagueConfig.from_yaml(default_config_path())
     cfg.validate()
-    assert {"QB", "RB", "WR", "TE", "K", "DEF"} == {s.name for s in cfg.slots}
+    # Confirmed from the league site: six slots, two WRs and a flex, and
+    # crucially no kicker and no team defense.
+    assert {s.name for s in cfg.slots} == {"QB", "RB", "WR1", "WR2", "TE", "FLEX"}
+    assert cfg.positions_used == {"QB", "RB", "WR", "TE"}
+    flex = next(s for s in cfg.slots if s.name == "FLEX")
+    assert flex.accepts("RB") and flex.accepts("WR") and not flex.accepts("QB")
     # Unverified guesses must be declared so reports can shout about them.
     assert cfg.assumptions

@@ -97,19 +97,35 @@ def availability_curves(
     if hazard is None:
         return None
 
+    # In week 1 the current season has no completed games, so the player's state
+    # has to come from the end of last season. That is real information: a back
+    # who finished the previous year on injured reserve is a materially worse
+    # bet for the opener than one who played week 18.
+    seasons = [season] if as_of_week > 1 else [season - 1, season]
     try:
-        panel = build_panel([season], client.cache_dir, config)
+        panel = build_panel(seasons, client.cache_dir, config)
     except FileNotFoundError:
-        log.warning("no cached data for %s; falling back to the prior", season)
+        log.warning("no cached data for %s; falling back to the prior", seasons)
         return None
     if panel.empty:
         return None
 
-    # The player's state is whatever his most recent completed week says.
-    latest = int(panel[panel["week"] < as_of_week]["week"].max()) if len(panel) else 0
-    if not latest:
-        return None
-    return hazard.curves_for_week(panel, season, latest, horizons=max(1, horizon))
+    current = panel[(panel["season"] == season) & (panel["week"] < as_of_week)]
+    if not current.empty:
+        source_season, source_week = season, int(current["week"].max())
+    else:
+        previous = panel[panel["season"] == season - 1]
+        if previous.empty:
+            return None
+        source_season, source_week = season - 1, int(previous["week"].max())
+        log.info(
+            "week %s: no games played yet, carrying availability state from %s week %s",
+            as_of_week, source_season, source_week,
+        )
+
+    return hazard.curves_for_week(
+        panel, source_season, source_week, horizons=max(1, horizon)
+    )
 
 
 def calibrate_field(
