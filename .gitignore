@@ -1,0 +1,22 @@
+# Never commit league credentials.
+.env
+*.secret
+secrets.yaml
+
+# Data cache (re-downloadable from nflverse)
+.cache/
+data/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+.venv/
+venv/
+
+# Personal league state — created by `seedman league init`, changes weekly.
+league-state.yaml
+probe-output/

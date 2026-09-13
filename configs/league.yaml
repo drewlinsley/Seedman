@@ -1,0 +1,98 @@
+﻿# =====================================================================
+# Rocco Siffredi survivor league
+# =====================================================================
+# IMPORTANT: the values below marked [ASSUMED] could not be read from the
+# league site (https://rocco-siffredi.onrender.com is blocked by this
+# environment's network egress policy).  They are the standard survivor-fantasy
+# defaults.  Correct anything that differs and every downstream number --
+# projections, survival odds, the season plan -- updates automatically.
+#
+# Run `seedman league doctor` for a checklist of exactly what to verify.
+
+league:
+  name: Rocco Siffredi
+  season: 2026
+
+survival:
+  # [CONFIRMED by format] Each NFL player may be started this many times all
+  # season. This single number is what creates the "spend now vs. save" tension.
+  player_reuse_limit: 1
+
+  # [ASSUMED] Teams still alive, including you, as of `as_of_week`.
+  teams_remaining: 12
+  as_of_week: 2
+
+  # [ASSUMED] How many teams get cut each week.
+  eliminations_per_week: 1
+
+  # [ASSUMED] Last week of the survival contest.
+  final_week: 17
+
+roster:
+  # [ASSUMED] Standard survivor lineup: one of each, no bench.
+  slots:
+    - {name: QB,  eligible: [QB]}
+    - {name: RB,  eligible: [RB]}
+    - {name: WR,  eligible: [WR]}
+    - {name: TE,  eligible: [TE]}
+    - {name: K,   eligible: [K]}
+    - {name: DEF, eligible: [DEF]}
+
+scoring:
+  # [ASSUMED] Full PPR. Set `receptions: 0.5` for half-PPR or `0` for standard.
+  passing_yards: 0.04
+  passing_tds: 4
+  passing_interceptions: -2
+  rushing_yards: 0.1
+  rushing_tds: 6
+  receptions: 1.0
+  receiving_yards: 0.1
+  receiving_tds: 6
+  fumbles_lost: -2
+  two_point_conversions: 2
+  special_teams_tds: 6
+
+  # Kicker
+  pat_made: 1
+  fg_made_0_19: 3
+  fg_made_20_29: 3
+  fg_made_30_39: 3
+  fg_made_40_49: 4
+  fg_made_50_59: 5
+  fg_made_60_: 5
+  fg_missed: -1
+
+  # [ASSUMED] Common yardage bonuses; delete this block if your league has none.
+  bonuses:
+    - {stat: passing_yards,   threshold: 300, points: 3}
+    - {stat: rushing_yards,   threshold: 100, points: 3}
+    - {stat: receiving_yards, threshold: 100, points: 3}
+
+  # Team defense / special teams
+  dst:
+    def_sacks: 1
+    def_interceptions: 2
+    fumble_recovery_opp: 2
+    def_tds: 6
+    def_safeties: 2
+    special_teams_tds: 6
+    def_punt_blocks: 2
+    def_fg_blocks: 2
+
+  # Points-allowed tiers, evaluated in order: first tier whose
+  # `max_points_allowed` is >= actual points allowed wins.
+  dst_points_allowed_tiers:
+    - {max_points_allowed: 0,   points: 10}
+    - {max_points_allowed: 6,   points: 7}
+    - {max_points_allowed: 13,  points: 4}
+    - {max_points_allowed: 20,  points: 1}
+    - {max_points_allowed: 27,  points: 0}
+    - {max_points_allowed: 34,  points: -1}
+    - {max_points_allowed: 999, points: -4}
+
+# Surfaced in every report so stale guesses cannot quietly drive decisions.
+assumptions:
+  - "Scoring is full PPR with 300/100/100 yardage bonuses — NOT verified against the league site."
+  - "Lineup is QB/RB/WR/TE/K/DEF with no bench or FLEX — NOT verified."
+  - "12 teams alive as of week 2, one elimination per week, through week 17 — NOT verified."
+  - "Each player is usable exactly once per season (player_reuse_limit: 1)."
