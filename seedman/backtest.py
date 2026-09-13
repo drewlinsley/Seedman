@@ -343,13 +343,18 @@ def survival_outcomes(
 
     Elimination is the genuine rule: lowest score among those still alive goes
     out. Opponents that have already been eliminated stop competing.
+
+    A strategy that outlasts the whole field counts as surviving every week, not
+    as surviving up to the week it won. Reporting the week it won would penalise
+    winning: a strategy that took the league in week 11 would score below one
+    that merely hung on until week 15 before being cut.
     """
     n_weeks, n_opponents = field_scores.shape
     alive = np.ones(n_opponents, dtype=bool)
 
     for week in range(n_weeks):
         if not alive.any():
-            return week, True  # everybody else is gone
+            return n_weeks, True  # everybody else is gone; never eliminated
 
         contenders = field_scores[week][alive]
         mine = strategy_scores[week]
@@ -498,7 +503,7 @@ def evaluate_strategies(
             {
                 "strategy": name,
                 "avg_weeks_survived": round(float(survived.mean()), 2),
-                "reached_final_week_pct": round(100 * float((survived >= len(weeks)).mean()), 1),
+                "never_eliminated_pct": round(100 * float((survived >= len(weeks)).mean()), 1),
                 "won_outright_pct": round(100 * float(won.mean()), 1),
                 "avg_weekly_points": round(float(np.mean(scores)), 2),
                 "worst_week": round(float(np.min(scores)), 2),

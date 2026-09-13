@@ -65,6 +65,13 @@ def test_outlasting_everyone_counts_as_a_win():
     assert won
 
 
+def test_winning_is_not_scored_as_a_short_season():
+    """Winning in week 1 must not read as worse than being cut in week 2."""
+    field = np.array([[10.0], [10.0], [10.0]])
+    weeks, won = survival_outcomes(np.array([100.0, 100.0, 100.0]), field)
+    assert won and weeks == 3
+
+
 def test_greedy_respects_the_used_ledger(config: LeagueConfig, projections):
     week_one = projections[projections["week"] == 1]
     lineup = _greedy_lineup(config, week_one, used={"QB0", "RB0"})
