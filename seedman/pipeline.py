@@ -138,10 +138,20 @@ def calibrate_field(
 ) -> FieldModel:
     """Estimate what a typical surviving opponent scores each week.
 
-    Real observed scores win when there are enough of them.  Otherwise we model
+    Real observed scores win when there are enough of them. Otherwise we model
     the median manager directly: with `T` teams alive, the typical manager is not
     starting the best option at each slot, he is starting something around the
-    `T/2`-th best.  And because this is a one-use format, by week `w` he has
+    `T/2`-th best.
+
+    Note what this deliberately does *not* use: the `field_lineups` block in
+    `fitted.yaml`, which measures what the k-th best player at each slot actually
+    scored. That sounds better -- real scores rather than our own projections --
+    but it picks those players by **season-long average**, which is hindsight no
+    manager has in week 1. It came out 1.84x higher than anything our projections
+    can field, and comparing a projected lineup against a hindsight-selected cut
+    line is not a comparison at all. Building the field from the same projections
+    as our own lineup keeps both sides on one scale, which matters far more here
+    than either side being individually unbiased.  And because this is a one-use format, by week `w` he has
     already burned his own top `w - 1` choices at that slot, so his typical pick
     slides steadily further down the board.  That gives a per-week field decay
     grounded in the same projections we use for ourselves, rather than a guessed
@@ -153,10 +163,6 @@ def calibrate_field(
         return FieldModel(mean=float(scores.mean()), sd=float(scores.std(ddof=1)))
 
     teams = max(2, state.teams_remaining)
-
-    measured = fitted.get().raw.get("field_lineups") or {}
-    if measured:
-        return _measured_field(config, state, weeks, measured, teams)
 
     by_week: dict[int, tuple[float, float]] = {}
     for week in weeks:

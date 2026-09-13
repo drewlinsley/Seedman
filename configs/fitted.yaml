@@ -55,60 +55,60 @@ availability:
   sample_size: 20465
 effectiveness_given_played:
   (none):
-    value: 0.9473
-    n: 2592
+    value: 0.9459
+    n: 2493
   Doubtful:
-    value: 0.3974
+    value: 0.3426
     n: 1
   Note:
     value: 1.446
     n: 1
   Out:
-    value: 1.2136
+    value: 1.2895
     n: 1
   Questionable:
-    value: 0.864
-    n: 921
+    value: 0.87
+    n: 876
 same_team_correlation:
   QB|RB:
-    value: 0.0834
-    n: 1653
+    value: 0.0782
+    n: 1644
   QB|WR:
-    value: 0.3797
-    n: 1700
+    value: 0.395
+    n: 1699
   QB|TE:
-    value: 0.3281
-    n: 1578
+    value: 0.3372
+    n: 1572
   RB|WR:
-    value: 0.0086
-    n: 1810
+    value: 0.016
+    n: 1796
   RB|TE:
-    value: -0.0111
-    n: 1683
+    value: -0.0067
+    n: 1668
   WR|TE:
-    value: 0.007
-    n: 1721
+    value: 0.0024
+    n: 1718
 common_variance_share:
-  value: 0.0355
-  between_week_variance: 13.67
-  within_week_variance: 371.53
+  value: 0.0358
+  between_week_variance: 12.43
+  within_week_variance: 334.81
   n: 2174
 volatility:
   CB:
-    slope: 2.6081
-    intercept: 0.0037
+    slope: 2.675
+    intercept: 0.0032
     n: 566
   DB:
-    slope: 2.2903
+    slope: 2.2647
     intercept: 0.017
     n: 179
   DE:
-    slope: 3.6598
+    slope: 3.6646
     intercept: 0.0
     n: 447
   DT:
-    slope: 2.8657
-    intercept: 0.0003
+    slope: 3.1316
+    intercept: -0.0001
     n: 434
   FS:
     slope: 3.7417
@@ -119,70 +119,70 @@ volatility:
     intercept: -0.0
     n: 46
   LB:
-    slope: 2.7202
-    intercept: 0.0012
+    slope: 2.7105
+    intercept: 0.0011
     n: 682
   OLB:
-    slope: 3.954
-    intercept: -0.0004
+    slope: 3.9803
+    intercept: -0.0003
     n: 101
   OT:
-    slope: 2.4966
-    intercept: 0.0048
+    slope: 2.5507
+    intercept: 0.0035
     n: 117
   P:
     slope: -1.9231
     intercept: 0.0541
     n: 134
   QB:
-    slope: 0.2168
-    intercept: 4.2899
+    slope: 0.2169
+    intercept: 4.2884
     n: 181
   RB:
-    slope: 0.4265
-    intercept: 2.1273
+    slope: 0.4595
+    intercept: 1.8795
     n: 443
   S:
     slope: 2.8284
     intercept: -0.0
     n: 58
   SAF:
-    slope: 2.7656
-    intercept: 0.002
+    slope: 2.8445
+    intercept: 0.0017
     n: 289
   TE:
-    slope: 0.5339
-    intercept: 1.3027
+    slope: 0.5933
+    intercept: 1.0607
     n: 372
   WR:
-    slope: 0.4663
-    intercept: 1.9853
+    slope: 0.5119
+    intercept: 1.6757
     n: 706
 field_lineups:
   '1':
-    mean: 119.34
-    sd: 42.0
+    mean: 103.51
+    sd: 38.82
     n: 59
   '3':
-    mean: 107.66
-    sd: 34.81
+    mean: 98.86
+    sd: 30.18
     n: 54
   '6':
-    mean: 98.59
-    sd: 35.87
-    n: 58
+    mean: 91.18
+    sd: 27.15
+    n: 57
   '10':
-    mean: 86.57
-    sd: 29.71
-    n: 58
+    mean: 79.45
+    sd: 27.4
+    n: 52
   '15':
-    mean: 80.18
-    sd: 29.67
-    n: 56
+    mean: 69.44
+    sd: 30.08
+    n: 57
   '20':
-    mean: 69.05
-    sd: 28.61
-    n: 55
+    mean: 60.69
+    sd: 22.26
+    n: 56
 availability_hazard:
   features:
   - age
@@ -218,7 +218,7 @@ availability_hazard:
     - 0.080474
     - 5.913983
     - 0.474527
-    - 6.973831
+    - 6.102291
     - 4.666232
     - 9.2e-05
     - 4.6e-05
@@ -239,7 +239,7 @@ availability_hazard:
     - 0.165257
     - 4.287414
     - 0.298668
-    - 6.719134
+    - 6.206388
     - 4.963608
     - 0.009571
     - 0.006768
@@ -254,27 +254,27 @@ availability_hazard:
     - 0.492998
     - 0.42913
     coef:
-    - -0.131982
-    - 0.095671
-    - 0.11467
-    - -0.16253
-    - 0.116929
-    - 0.815086
-    - 0.12426
-    - -0.144244
-    - 0.11215
-    - 0.076705
-    - 0.105443
-    - 0.204944
-    - -0.381141
-    - -0.235779
-    - -0.412083
-    - -0.474248
-    - -0.38729
-    - 0.069573
-    - 0.011298
-    - 0.200916
-    intercept: 2.328624
+    - -0.132072
+    - 0.096604
+    - 0.111334
+    - -0.158948
+    - 0.117944
+    - 0.801761
+    - 0.148024
+    - -0.146824
+    - 0.113389
+    - 0.077239
+    - 0.102911
+    - 0.196074
+    - -0.362199
+    - -0.226361
+    - -0.397645
+    - -0.450306
+    - -0.394438
+    - 0.067209
+    - 0.014842
+    - 0.204371
+    intercept: 2.326369
     n: 21833
   recovery:
     mean:
@@ -284,7 +284,7 @@ availability_hazard:
     - 0.397052
     - 2.385912
     - 0.073861
-    - 1.321818
+    - 1.162945
     - 1.005756
     - 0.127176
     - 0.023571
@@ -305,7 +305,7 @@ availability_hazard:
     - 0.291007
     - 2.849168
     - 0.137536
-    - 2.844367
+    - 2.579881
     - 2.096395
     - 0.33317
     - 0.151709
@@ -320,31 +320,31 @@ availability_hazard:
     - 0.487662
     - 0.365136
     coef:
-    - 0.094818
-    - -0.159287
-    - -0.322384
-    - -0.063491
-    - 0.125181
-    - 0.02921
-    - -0.074581
-    - 0.008853
-    - 0.003107
-    - 0.05026
-    - 0.077553
-    - -0.175847
-    - 0.005916
-    - 0.082337
-    - 0.277996
-    - 0.290688
-    - 0.017814
-    - -0.016105
-    - 0.00109
-    - -0.0003
-    intercept: -1.233888
+    - 0.091871
+    - -0.156826
+    - -0.31714
+    - -0.067886
+    - 0.124963
+    - 0.037156
+    - -0.09331
+    - 0.01758
+    - 0.002532
+    - 0.05029
+    - 0.077664
+    - -0.176011
+    - 0.006356
+    - 0.083198
+    - 0.278635
+    - 0.29098
+    - 0.022428
+    - -0.016731
+    - -0.000717
+    - -0.001929
+    intercept: -1.233687
     n: 7297
 rate_model:
   prior_season_weight:
-    value: 4.0
+    value: 2.0
     n: 68
   replacement_weight:
     value: 5.0
@@ -352,76 +352,76 @@ rate_model:
   replacement_quantile:
     value: 0.05
     n: 68
-  fit_score_points_per_start: 18.163
+  fit_score_points_per_start: 16.489
   fit_seasons:
   - 2021
   - 2022
   - 2023
   - 2024
   validation_season: 2025
-  validation_points_per_start: 17.48
+  validation_points_per_start: 16.031
 rate_calibration:
   QB|1-3:
-    slope: 2.0752
-    intercept: -6.0606
+    slope: 2.8369
+    intercept: -7.2347
     n: 486
   RB|1-3:
-    slope: 1.3016
-    intercept: 1.841
+    slope: 1.1465
+    intercept: 4.2709
     n: 495
   TE|1-3:
-    slope: 1.4594
-    intercept: -1.0936
+    slope: 1.2341
+    intercept: 0.5579
     n: 495
   WR|1-3:
-    slope: 1.2915
-    intercept: 2.4759
+    slope: 0.8035
+    intercept: 6.1831
     n: 495
   QB|4-6:
-    slope: 1.8308
-    intercept: -6.3299
+    slope: 1.9559
+    intercept: -5.3614
     n: 539
   RB|4-6:
-    slope: 1.2675
-    intercept: 0.0973
+    slope: 1.2663
+    intercept: 1.1825
     n: 540
   TE|4-6:
-    slope: 1.5474
-    intercept: -1.6375
+    slope: 1.2854
+    intercept: 0.2659
     n: 540
   WR|4-6:
-    slope: 1.1653
-    intercept: 1.3004
+    slope: 1.0657
+    intercept: 2.4476
     n: 540
   QB|7-10:
-    slope: 1.4015
-    intercept: -4.9089
+    slope: 1.3841
+    intercept: -3.5538
     n: 720
   RB|7-10:
-    slope: 1.0133
-    intercept: 0.9552
+    slope: 0.849
+    intercept: 2.7292
     n: 720
   TE|7-10:
-    slope: 0.9544
-    intercept: 0.567
+    slope: 0.7415
+    intercept: 1.6499
     n: 720
   WR|7-10:
-    slope: 1.0867
-    intercept: -1.0027
+    slope: 0.9513
+    intercept: 0.5749
     n: 720
   QB|11-18:
-    slope: 1.4696
-    intercept: -6.8679
+    slope: 1.3972
+    intercept: -5.1775
     n: 1260
   RB|11-18:
-    slope: 1.1034
-    intercept: -1.2072
+    slope: 1.0256
+    intercept: 0.0036
     n: 1260
   TE|11-18:
-    slope: 1.1625
-    intercept: -1.2131
+    slope: 1.0551
+    intercept: -0.2132
     n: 1260
   WR|11-18:
-    slope: 1.0179
-    intercept: 0.2604
+    slope: 0.8727
+    intercept: 1.8514
     n: 1260
