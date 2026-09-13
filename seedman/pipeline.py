@@ -245,6 +245,7 @@ def run(
     max_per_team: int = 2,
     max_per_game: int = 3,
     as_of: pd.Timestamp | None = None,
+    hold_players: set[str] | None = None,
 ) -> PipelineResult:
     """Fetch, project, calibrate and optimise in one go."""
     client = NflverseClient(cache_dir=Path(cache_dir), offline=offline)
@@ -270,6 +271,7 @@ def run(
         projections,
         field_model=field,
         used_players=state.used_players,
+        hold_players=hold_players,
         use_survival_weights=use_survival_weights,
         candidates_per_slot_week=candidates,
         max_per_team=max_per_team,

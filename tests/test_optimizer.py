@@ -175,3 +175,26 @@ def test_plan_frames_render(config: LeagueConfig, projections):
         "week", "projected", "sd", "cut_line", "survive_pct", "teams_alive", "point_weight",
     ]
     assert 0.0 <= plan.cumulative_survival <= 1.0
+
+
+def test_hold_bars_a_player_this_week_but_not_later(config: LeagueConfig, projections):
+    """Holding is not the same as burning: the player must still be usable later."""
+    plan = solve(config, projections, hold_players={"QB0"})
+    first = plan.weeks[0]
+    assert "QB0" not in {p["player_id"] for p in first.picks}
+    later = {p["player_id"] for w in plan.weeks[1:] for p in w.picks}
+    assert "QB0" in later
+
+
+def test_holding_every_option_at_a_slot_is_infeasible(config: LeagueConfig, projections):
+    qbs = {f"QB{i}" for i in range(6)}
+    plan = solve(config, projections, hold_players=qbs)
+    assert plan.status != "Optimal"
+
+
+def test_hold_and_used_are_different(config: LeagueConfig, projections):
+    """`used` is permanent, `hold` is one week."""
+    held = solve(config, projections, hold_players={"RB0"})
+    burned = solve(config, projections, used_players={"RB0"})
+    assert "RB0" in {p["player_id"] for w in held.weeks for p in w.picks}
+    assert "RB0" not in {p["player_id"] for w in burned.weeks for p in w.picks}

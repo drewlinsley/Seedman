@@ -135,6 +135,7 @@ class SurvivorOptimizer:
         *,
         field_model: FieldModel,
         used_players: set[str] | None = None,
+        hold_players: set[str] | None = None,
         candidates_per_slot_week: int = DEFAULT_CANDIDATES_PER_SLOT_WEEK,
         use_survival_weights: bool = True,
         max_per_team: int = MAX_PER_TEAM_DEFAULT,
@@ -145,6 +146,12 @@ class SurvivorOptimizer:
         self.config = config
         self.field = field_model
         self.used = used_players or set()
+        # Players barred from the *first* planned week only, and still free in
+        # every later one. Distinct from `used`, which is permanent. This is how
+        # you act on something the model cannot see -- a report you do not trust,
+        # a player you want to hold on principle -- without lying to it about
+        # his availability for the rest of the season.
+        self.hold = hold_players or set()
         self.candidates_per_slot_week = candidates_per_slot_week
         self.use_survival_weights = use_survival_weights
         self.max_per_team = max_per_team
@@ -336,6 +343,19 @@ class SurvivorOptimizer:
                 problem += (
                     pulp.lpSum(vars_) <= 1,
                     f"oneslot_{_sanitise(player_id)}_{week}",
+                )
+
+        # Manual holds: barred this week, free thereafter.
+        if self.hold and self.weeks:
+            first = self.weeks[0]
+            held: dict[str, list[pulp.LpVariable]] = {}
+            for (week, _slot, idx), var in variables.items():
+                if week == first and player_of_index[idx] in self.hold:
+                    held.setdefault(player_of_index[idx], []).append(var)
+            for player_id, vars_ in held.items():
+                problem += (
+                    pulp.lpSum(vars_) == 0,
+                    f"hold_{_sanitise(player_id)}",
                 )
 
         # Diversification. The objective is blind to variance, so without these

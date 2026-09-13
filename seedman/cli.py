@@ -93,6 +93,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_opt.add_argument("--offline", action="store_true")
     p_opt.add_argument("--csv", type=Path, default=None, help="write the plan to CSV")
     p_opt.add_argument(
+        "--hold",
+        nargs="+",
+        default=None,
+        metavar="PLAYER",
+        help="bar these players from this week only; they stay free for later weeks",
+    )
+    p_opt.add_argument(
         "--as-of",
         default="now",
         help="drop players whose game has kicked off (ISO timestamp, or 'now', or 'off')",
@@ -248,6 +255,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         max_per_team=args.max_per_team,
         max_per_game=args.max_per_game,
         as_of=_parse_as_of(args.as_of),
+        hold_players=_resolve_holds(args, config),
     )
     plan = result.plan
 
@@ -268,6 +276,22 @@ def cmd_optimize(args: argparse.Namespace) -> int:
             print(f"  - {note}")
         print("!" * 72)
     return 0
+
+
+def _resolve_holds(args: argparse.Namespace, config: LeagueConfig) -> set[str] | None:
+    """Turn `--hold` names into player ids, failing loudly on a typo.
+
+    A silently-unresolved name would start the very player you meant to sit.
+    """
+    if not args.hold:
+        return None
+    from .league.manual import PlayerResolver, UnresolvedPlayers
+
+    client = NflverseClient(cache_dir=args.cache)
+    resolved, missing = PlayerResolver(client.rosters(config.season)).resolve_all(args.hold)
+    if missing:
+        raise UnresolvedPlayers(missing)
+    return resolved
 
 
 def _parse_as_of(value: str):
