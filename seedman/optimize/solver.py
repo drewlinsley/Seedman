@@ -372,51 +372,80 @@ class SurvivorOptimizer:
         Each candidate move is evaluated on the objective itself, never on a
         linearisation, so this can only help.
         """
-        by_index = {int(r.index): r for r in assignment.itertuples(index=False)}
-        # (week, slot) -> projections row index currently assigned there.
-        current = {(int(r.week), str(r.slot)): int(r.index) for r in assignment.itertuples(index=False)}
         frame = self.projections
-        # Fast lookup: which row is player p in week w, if he is a candidate there.
+        # (week, slot) -> projections row index currently assigned there.
+        current = {
+            (int(r.week), str(r.slot)): int(r.index)
+            for r in assignment.itertuples(index=False)
+        }
+        # Which row is player p in week w, if he is a candidate there at all.
         row_of = {
             (str(r.player_id), int(r.week)): int(r.Index) for r in frame.itertuples()
         }
         player_of = frame["player_id"].astype(str).to_dict()
 
-        best = self._objective(plan)
+        # Cache one WeekPlan per week. A swap touches exactly two weeks, so
+        # re-pricing those two is all the work a candidate move needs -- the
+        # objective itself is then arithmetic over the cached numbers.
+        slots_by_week: dict[int, dict[int, str]] = {}
+        for (week, slot), idx in current.items():
+            slots_by_week.setdefault(week, {})[idx] = slot
+        cache = {
+            week: self._week_plan(week, slots, thresholds, weights)
+            for week, slots in slots_by_week.items()
+        }
+
+        def assemble(overrides: dict[int, WeekPlan] | None = None) -> SeasonPlan:
+            merged = dict(cache)
+            merged.update(overrides or {})
+            trial_plan = SeasonPlan(weeks=[merged[w] for w in sorted(merged)])
+            trial_plan.status = plan.status
+            trial_plan.best_iteration = plan.best_iteration
+            return trial_plan
+
+        best = self._objective(assemble())
         improved = True
         rounds = 0
+        slot_names = [s.name for s in self.config.slots]
         while improved and rounds < POLISH_ROUNDS:
             improved = False
             rounds += 1
-            slots = [s.name for s in self.config.slots]
-            for slot in slots:
-                for week_a, week_b in itertools.combinations(self.weeks, 2):
+            for slot in slot_names:
+                for week_a, week_b in itertools.combinations(sorted(cache), 2):
                     key_a, key_b = (week_a, slot), (week_b, slot)
                     if key_a not in current or key_b not in current:
                         continue
                     idx_a, idx_b = current[key_a], current[key_b]
-                    # The same player, projected in the other week.
-                    swap_a = row_of.get((player_of[idx_a], week_b))
-                    swap_b = row_of.get((player_of[idx_b], week_a))
-                    if swap_a is None or swap_b is None:
+                    # The same two players, projected in each other's week.
+                    moved_a = row_of.get((player_of[idx_a], week_b))
+                    moved_b = row_of.get((player_of[idx_b], week_a))
+                    if moved_a is None or moved_b is None:
                         continue
 
                     trial = dict(current)
-                    trial[key_a], trial[key_b] = swap_b, swap_a
+                    trial[key_a], trial[key_b] = moved_b, moved_a
                     if not self._respects_caps(trial):
                         continue
-                    candidate = self._plan_from_mapping(trial, thresholds, weights)
+
+                    rebuilt = {}
+                    for week in (week_a, week_b):
+                        slots = {
+                            idx: s
+                            for (w, s), idx in trial.items()
+                            if w == week
+                        }
+                        rebuilt[week] = self._week_plan(
+                            week, slots, thresholds, weights
+                        )
+                    candidate = assemble(rebuilt)
                     score = self._objective(candidate)
                     if score > best + POLISH_TOL:
-                        # Carry the solver's own bookkeeping across; the polish
-                        # rearranges an optimal assignment, it does not re-solve.
-                        candidate.status = plan.status
-                        candidate.best_iteration = plan.best_iteration
                         best, current, plan = score, trial, candidate
+                        cache.update(rebuilt)
                         improved = True
         if rounds > 1:
             log.debug("polish improved the objective over %d rounds", rounds - 1)
-        return plan
+        return self._finalise(plan)
 
     def _respects_caps(self, mapping: dict[tuple[int, str], int]) -> bool:
         """Re-check the per-team and per-game limits after a swap."""
@@ -435,17 +464,6 @@ class SurvivorOptimizer:
                 return False
         return True
 
-    def _plan_from_mapping(
-        self,
-        mapping: dict[tuple[int, str], int],
-        thresholds: dict[int, tuple[float, float, int]],
-        weights: dict[int, float],
-    ) -> SeasonPlan:
-        rows = [
-            {"week": week, "slot": slot, "index": idx}
-            for (week, slot), idx in mapping.items()
-        ]
-        return self._build_plan(pd.DataFrame(rows), thresholds, weights)
 
     # ------------------------------------------------------------------
     def _annotate(self, plan: SeasonPlan) -> None:
@@ -673,6 +691,67 @@ class SurvivorOptimizer:
                 )
 
     # ------------------------------------------------------------------
+    def _week_plan(
+        self,
+        week: int,
+        slots: dict[int, str],
+        thresholds: dict[int, tuple[float, float, int]],
+        weights: dict[int, float],
+    ) -> WeekPlan:
+        """Score one week's lineup. Pulled out of `_build_plan` so that the
+        polish can re-price the two weeks a swap touches instead of all sixteen,
+        which is the difference between a local search that runs in seconds and
+        one that runs in minutes."""
+        frame = self.projections
+        rows = frame.loc[list(slots)]
+
+        mean = float(rows["mean"].sum())
+        # Full covariance, not a sum of squares: a stacked lineup really is
+        # riskier and the weights need to know it.
+        sd = lineup_sd(rows)
+
+        thr_mean, thr_sd, alive = thresholds[week]
+        # Drop the league-wide shock from our spread too, for the same reason it
+        # was dropped from the threshold: it cancels.
+        common = self._common_variance.get(week, 0.0)
+        own_idiosyncratic = float(np.sqrt(max(sd**2 - common, 1.0)))
+        prob = survival_probability(mean, own_idiosyncratic, thr_mean, thr_sd)
+
+        order = [s.name for s in self.config.slots]
+        picks = [
+            {
+                "slot": slots[idx],
+                "player_id": row["player_id"],
+                "name": row["name"],
+                "position": row["position"],
+                "team": row["team"],
+                "opponent": row["opponent"],
+                "projected": round(float(row["mean"]), 2),
+                "sd": round(float(row["sd"]), 2),
+                "availability": round(float(row["availability"]), 3),
+                "status": row["report_status"],
+            }
+            for idx, row in rows.iterrows()
+        ]
+        picks.sort(key=lambda p: order.index(p["slot"]))
+
+        return WeekPlan(
+            week=week,
+            picks=picks,
+            mean=mean,
+            sd=sd,
+            idiosyncratic_sd=own_idiosyncratic,
+            threshold_mean=thr_mean,
+            threshold_sd=thr_sd,
+            survival_probability=prob,
+            point_weight=weights.get(week, 1.0),
+            teams_alive=alive,
+            phase=(
+                "PLAYOFF" if self.config.survival.is_playoff_week(week) else "regular"
+            ),
+        )
+
+    # ------------------------------------------------------------------
     def _build_plan(
         self,
         assignment: pd.DataFrame,
@@ -681,83 +760,40 @@ class SurvivorOptimizer:
     ) -> SeasonPlan:
         frame = self.projections
         plan = SeasonPlan()
-        survival_probs: list[float] = []
 
         for week in self.weeks:
             picks_idx = assignment[assignment["week"] == week]
             if picks_idx.empty:
                 continue
-
-            rows = frame.loc[picks_idx["index"].tolist()]
-            slots = picks_idx.set_index("index")["slot"].to_dict()
-
-            mean = float(rows["mean"].sum())
-            # Full covariance, not a sum of squares: a stacked lineup really is
-            # riskier and the survival weights need to know it.
-            sd = lineup_sd(rows)
-
-            thr_mean, thr_sd, alive = thresholds[week]
-            # Drop the league-wide shock from our spread too, for the same
-            # reason it was dropped from the cut line: it cancels.
-            common = self._common_variance.get(week, 0.0)
-            own_idiosyncratic = float(np.sqrt(max(sd**2 - common, 1.0)))
-            prob = survival_probability(mean, own_idiosyncratic, thr_mean, thr_sd)
-            survival_probs.append(prob)
-
-            picks = []
-            for idx, row in rows.iterrows():
-                picks.append(
-                    {
-                        "slot": slots[idx],
-                        "player_id": row["player_id"],
-                        "name": row["name"],
-                        "position": row["position"],
-                        "team": row["team"],
-                        "opponent": row["opponent"],
-                        "projected": round(float(row["mean"]), 2),
-                        "sd": round(float(row["sd"]), 2),
-                        "availability": round(float(row["availability"]), 3),
-                        "status": row["report_status"],
-                    }
-                )
-            picks.sort(key=lambda p: [s.name for s in self.config.slots].index(p["slot"]))
-
-            plan.weeks.append(
-                WeekPlan(
-                    week=week,
-                    picks=picks,
-                    mean=mean,
-                    sd=sd,
-                    idiosyncratic_sd=own_idiosyncratic,
-                    threshold_mean=thr_mean,
-                    threshold_sd=thr_sd,
-                    survival_probability=prob,
-                    point_weight=weights.get(week, 1.0),
-                    teams_alive=alive,
-                    phase=(
-                        "PLAYOFF"
-                        if self.config.survival.is_playoff_week(week)
-                        else "regular"
-                    ),
-                )
+            week_plan = self._week_plan(
+                week,
+                picks_idx.set_index("index")["slot"].to_dict(),
+                thresholds,
+                weights,
             )
+            plan.weeks.append(week_plan)
 
+        return self._finalise(plan)
+
+    # ------------------------------------------------------------------
+    def _finalise(self, plan: SeasonPlan) -> SeasonPlan:
+        """Fill in the whole-plan totals and the realised per-week weights.
+
+        Shared by the MILP path and the polish, so a polished plan is never
+        returned with the aggregates left at zero -- which it was, silently,
+        until a test that reads `cumulative_survival` caught it.
+        """
         # Report what a projected point is *actually* worth in each week under
         # the finished plan, rather than the weight that happened to generate
         # it -- the latter is an artefact of whichever iteration won. Normalised
         # to mean 1 so it reads as "a point here is worth 1.8x a point there".
-        realised = _normalise(
-            {
-                wp.week: marginal_point_value(
-                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
-                )
-                for wp in plan.weeks
-            }
-        )
+        realised = _normalise(self._point_weights(plan))
         for wp in plan.weeks:
             wp.point_weight = realised[wp.week]
 
-        plan.cumulative_survival = cumulative_survival(survival_probs)
+        plan.cumulative_survival = cumulative_survival(
+            [wp.survival_probability for wp in plan.weeks]
+        )
         plan.total_points = sum(wp.mean for wp in plan.weeks)
         return plan
 

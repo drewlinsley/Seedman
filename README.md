@@ -22,12 +22,28 @@ run at whatever strength keeps the record above the bracket line:
 
 ```
  week  projected    sd  opponent  win_pct   phase  point_weight
-    2      60.14 17.33     63.90     44.4 regular        0.886
-    3      64.05 17.93     64.33     49.6 regular        0.811
+    2      60.14 17.33     63.90     44.4 regular        0.478
+    3      64.38 18.06     64.33     50.1 regular        0.494
    ...
-   15      24.81 10.51     22.56     55.2 regular        1.113
-   16      39.59 14.66     26.91     74.2 PLAYOFF        0.598
-   17      37.27 14.50     26.60     70.9 PLAYOFF        0.669
+   15      24.80 10.43     22.56     55.2 regular        0.765
+   16      38.99 14.68     33.89     59.9 PLAYOFF        3.328
+   17      37.88 14.26     32.60     60.4 PLAYOFF        3.332
+
+  P(make the playoffs)  = 64.3%
+  P(win it all)         = 23.3%
+```
+
+Run the same board with `--no-survival` — start the best player available every
+week — and it makes the playoffs *more* often (76.9% against 64.3%) and then
+loses there, because it arrives at the bracket on its sixteenth-best quarterback
+while the opponent saved. P(win it all) falls to **7.3%**, below the 8.3% a
+twelve-team coin flip would give you. That gap holds across every assumption
+about how hard opponents bank, and widens as the bracket gets tougher:
+
+```
+playoff opponent scores        27       31       34       38       42       46
+save for the bracket        32.9%    26.7%    22.2%    16.6%    11.9%     8.0%
+spend early                 15.1%     9.7%     6.6%     3.7%     1.9%     0.9%
 ```
 
 Run the same board as a survivor pool and the plan inverts: it spends early,
@@ -369,9 +385,14 @@ Best-of-iterates cannot repair that, because every iterate shares the bias. So
 the solve finishes with an exact local search on the true objective -- swap the
 occupants of one slot between two weeks, keep the move only if the objective
 genuinely improves. Candidate moves are scored on the objective itself, never on
-a linearisation, so the pass can only help. Afterwards the marginal values sit
-within 4x, which is what an optimum should look like: **not "playoff weeks are
-worth more" -- that is the input, not the output.**
+a linearisation, so the pass can only help. Afterwards the marginal values sit within 4x on a
+flat synthetic board.
+
+They do not fully equalise on the real one -- a playoff point still prices around
+7x a week-2 point -- and that is a granularity limit rather than a bug left
+unfixed: the swap that would close the gap moves a 25-point quarterback against a
+4-point flex, which overshoots in the other direction. A first-order condition
+describes infinitesimal transfers, and lineups do not come in infinitesimals.
 
 ## Read this before you trust a lineup
 

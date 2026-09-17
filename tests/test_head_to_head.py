@@ -243,8 +243,13 @@ def test_marginal_value_equalises_once_the_plan_is_optimal():
 
     Playoff weeks start out worth more per point, which is why they attract the
     stars. By the time the allocation is settled those weeks are comfortable and
-    the regular-season games are close, so the marginal values converge. A large
-    residual gap would mean points are still sitting in the wrong weeks.
+    the regular-season games are close, so the marginal values converge.
+
+    They converge, they do not meet: a first-order condition describes
+    infinitesimal transfers and lineups do not come in infinitesimals. This
+    fixture uses a smooth board where the granularity is one 1.5-point step, so
+    4x is a fair bound; on real projections, where a swap can move a 25-point
+    quarterback, the residual gap is wider.
     """
     plan = _solve("head_to_head")
     weights = [wp.point_weight for wp in plan.weeks]
@@ -307,3 +312,17 @@ def test_polish_respects_the_stacking_caps():
     for wp in plan.weeks:
         teams = [p["team"] for p in wp.picks]
         assert len(teams) == len(set(teams))
+
+
+def test_a_polished_plan_still_reports_its_totals():
+    """The polish returns a different plan object; it must be just as complete.
+
+    It was not: swapping in a rebuilt plan left `cumulative_survival` and
+    `total_points` at zero, which is the kind of bug that reads as "this lineup
+    scores nothing" rather than as a crash.
+    """
+    plan = _solve("head_to_head")
+    assert plan.total_points > 0
+    assert 0.0 <= plan.cumulative_survival <= 1.0
+    assert all(wp.point_weight > 0 for wp in plan.weeks)
+    assert plan.status == "Optimal"
