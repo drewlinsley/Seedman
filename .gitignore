@@ -18,5 +18,6 @@ dist/
 venv/
 
 # Personal league state — created by `seedman league init`, changes weekly.
-league-state.yaml
+# league-state.yaml is now tracked — it is the one-use ledger and losing it
+# would silently corrupt every future week. It holds no credentials.
 probe-output/

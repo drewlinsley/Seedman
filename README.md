@@ -105,6 +105,37 @@ largely cancels it -- but lineup totals read low early in a season. A calibratio
 bucketed by games played cuts the early-season bias to 21%, and costs 5.6 points
 a week on the decision metric, so it is not enabled.
 
+### Which ranker to trust in the season's first weeks
+
+Pooled over weeks 2-17 the model out-ranks every baseline at every position. Cut
+the same held-out 2025 rows down to **weeks 2-4** and that stops being true:
+
+| weeks 2-4, held-out 2025 | seedman | prior season | season-to-date |
+|---|---|---|---|
+| QB | **0.633** | 0.502 | 0.405 |
+| RB | 0.624 | 0.661 | **0.688** |
+| WR | 0.587 | **0.632** | 0.586 |
+| TE | **0.600** | 0.536 | 0.523 |
+
+So in the season's opening weeks the model is the best ranker at QB and TE and
+the *worst* of the three at RB and WR. The obvious culprit -- one game of current
+season outvoting half of last season, since `prior_season_weight` is a fixed
+quantum of 2 against `n_cur` -- is not the culprit. Sweeping that weight over
+2/4/6/8/12/20 on weeks 2-4 makes the model monotonically worse (average rank
+correlation 0.611 down to 0.534), so the fitted 2.0 is already right, even
+restricted to the weeks where the model loses.
+
+What is left is the multipliers. Push `prior_season_weight` to 20 and the rate
+term is essentially last season's average, yet the model still ranks WRs at 0.560
+against that same average's 0.632 -- the gap is the Vegas-context and availability
+factors, and early in a season they subtract about 0.07 of rank correlation at
+WR. That is a real defect and it is **not fixed**; the honest workaround, until
+it is, is to rank by position with whichever column wins above and let the model
+supply only EV and standard deviation, which is what a week-2 lineup here does.
+
+Reproduce: `replay_projections(cfg, 2025, first_week=2, last_week=4)` then
+`accuracy_table(rows, ["mean", "prior_season", "season_to_date"])`.
+
 ### Does the survival objective actually win leagues?
 
 Separately from projection accuracy: simulate whole survivor seasons on real
@@ -274,11 +305,17 @@ records which it was.
 blocked by the network egress policy of the environment this was written in, so
 its scoring rules, roster shape and your burned-player list could not be read.
 
-Everything in `configs/league.yaml` marked `[ASSUMED]` is a standard-survivor-format
-guess: full PPR, QB/RB/WR/TE/K/DEF with no bench, 12 teams, one cut a week. Every
-report prints those assumptions in a banner, and `seedman league doctor` lists them
-as a checklist. **Fix them first** — scoring rules in particular change which players
-are even worth considering.
+Most of it has since been pinned down without the site. The roster shape
+(QB/RB/WR/WR/TE/FLEX, no kicker, no defense) came off a lineup screenshot, half PPR
+came from the commissioner, and **the scoring was then confirmed arithmetically**: an
+opponent's week-1 card totalling 82.46 reconciles to the cent under half PPR with no
+yardage bonuses, and only under that — Chris Olave went for 182 receiving yards and
+was scored 23.20, so the 100-yard bonus that most templates assume does not exist here.
+A single opponent box score is worth more than any amount of guessing at defaults.
+
+What is still `[ASSUMED]` in `configs/league.yaml`: 12 teams, one cut a week through
+week 17, and TE eligibility in the FLEX. Every report prints those in a banner, and
+`seedman league doctor` lists them as a checklist.
 
 Two ways to close the gap:
 

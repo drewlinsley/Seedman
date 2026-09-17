@@ -37,7 +37,8 @@ roster:
     - {name: WR1,  eligible: [WR]}
     - {name: WR2,  eligible: [WR]}
     - {name: TE,   eligible: [TE]}
-    # [ASSUMED] Flex seen holding a WR; RB/WR/TE is the near-universal rule.
+    # [CONFIRMED] Flex seen holding both a WR and an RB on real lineup cards;
+    # TE eligibility is the remaining piece of convention.
     - {name: FLEX, eligible: [RB, WR, TE]}
 
 scoring:
@@ -54,18 +55,18 @@ scoring:
   two_point_conversions: 2
   special_teams_tds: 6
 
-  # [ASSUMED] Common yardage bonuses; delete this block if your league has none.
-  bonuses:
-    - {stat: passing_yards,   threshold: 300, points: 3}
-    - {stat: rushing_yards,   threshold: 100, points: 3}
-    - {stat: receiving_yards, threshold: 100, points: 3}
+  # [CONFIRMED from a week 1 box score] No yardage bonuses. Chris Olave went for
+  # 182 receiving yards and the league scored him 23.20, which is exactly half
+  # PPR with no century bonus; all six players on that lineup card reconcile to
+  # the cent, and the card's 82.46 total matches only with `bonuses` empty.
+  bonuses: []
 
 
 # Surfaced in every report so stale guesses cannot quietly drive decisions.
 assumptions:
   - "Half PPR CONFIRMED (0.5 per reception)."
-  - "300/100/100 yardage bonuses still NOT verified — most half-PPR leagues have none. Delete the `bonuses:` block if yours does not."
+  - "No yardage bonuses — CONFIRMED by reconciling a week 1 lineup card to the cent (82.46)."
   - "Lineup CONFIRMED from the league site: QB/RB/WR/WR/TE/FLEX, no kicker, no defense."
-  - "FLEX assumed to accept RB/WR/TE — seen holding a WR, the rest is convention."
+  - "FLEX takes RB and WR — both CONFIRMED from lineup cards. TE eligibility assumed."
   - "12 teams alive as of week 2, one elimination per week, through week 17 — NOT verified."
   - "Each player is usable exactly once per season (player_reuse_limit: 1)."
