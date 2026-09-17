@@ -25,17 +25,23 @@ maximisation, which is available via `--no-survival` for comparison.
 
 from __future__ import annotations
 
+import itertools
 import logging
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
 import pulp
+from scipy.stats import norm
 
 from .. import fitted as _fitted
 from ..config import LeagueConfig
 from ..correlation import lineup_sd
 from ..survival import (
+    berth_sensitivity,
+    playoff_cut_wins,
+    playoff_opponent_moments,
+    playoff_probability,
     FieldModel,
     cumulative_survival,
     log_survival_probability,
@@ -58,6 +64,11 @@ WEIGHT_DAMPING = 0.5
 # happily stack four players from one game for a fraction of a projected point.
 # Correlated lineups are penalised in the reported spread, but only a hard cap
 # actually stops the solver building them.
+# Local-search budget for the post-solve polish. Each round is O(slots * weeks^2)
+# objective evaluations, which is cheap next to a MILP re-solve.
+POLISH_ROUNDS = 6
+POLISH_TOL = 1e-9
+
 MAX_PER_TEAM_DEFAULT = 2
 MAX_PER_GAME_DEFAULT = 3
 
@@ -89,12 +100,23 @@ class WeekPlan:
     # the planned weeks average 1. High means "spend here"; low means "coast".
     point_weight: float
     teams_alive: int
+    # "regular" or "PLAYOFF" -- which of the two objectives this week serves.
+    phase: str = "regular"
 
 
 @dataclass
 class SeasonPlan:
     weeks: list[WeekPlan] = field(default_factory=list)
     cumulative_survival: float = 0.0
+    # Head-to-head headline numbers. `cumulative_survival` means "never finish
+    # last" in a survivor pool and is meaningless here -- the product of sixteen
+    # coin flips is near zero however good the plan is, because you are supposed
+    # to lose some.
+    playoff_probability: float = 0.0
+    title_probability: float = 0.0
+    wins_needed: int = 0
+    expected_wins: float = 0.0
+    head_to_head: bool = False
     total_points: float = 0.0
     iterations: int = 0
     best_iteration: int = 0
@@ -109,24 +131,39 @@ class SeasonPlan:
         return pd.DataFrame(rows)
 
     def summary_frame(self) -> pd.DataFrame:
-        return pd.DataFrame(
-            [
-                {
-                    "week": wp.week,
-                    "projected": round(wp.mean, 2),
-                    "sd": round(wp.sd, 2),
-                    "cut_line": round(wp.threshold_mean, 2),
-                    "survive_pct": round(100 * wp.survival_probability, 1),
-                    "teams_alive": wp.teams_alive,
-                    "point_weight": round(wp.point_weight, 4),
-                }
-                for wp in self.weeks
-            ]
-        )
+        """One row per planned week, labelled for the format being played.
+
+        The two modes are asking different questions, so they get different
+        columns: how many teams are left and whether you survived, against who
+        you face and whether the week is a bracket game.
+        """
+        rows = []
+        for wp in self.weeks:
+            row = {
+                "week": wp.week,
+                "projected": round(wp.mean, 2),
+                "sd": round(wp.sd, 2),
+            }
+            if self.head_to_head:
+                row["opponent"] = round(wp.threshold_mean, 2)
+                row["win_pct"] = round(100 * wp.survival_probability, 1)
+                row["phase"] = wp.phase
+            else:
+                row["cut_line"] = round(wp.threshold_mean, 2)
+                row["survive_pct"] = round(100 * wp.survival_probability, 1)
+                row["teams_alive"] = wp.teams_alive
+            row["point_weight"] = round(wp.point_weight, 4)
+            rows.append(row)
+        return pd.DataFrame(rows)
 
 
 class SurvivorOptimizer:
-    """Plans the remaining season under a survivor league's usage constraint."""
+    """Plans the remaining season under the one-start-per-player constraint.
+
+    Named for the survivor format it was written against; it now serves both
+    that and head-to-head, which differ in the objective rather than in the
+    usage constraint they share.
+    """
 
     def __init__(
         self,
@@ -141,6 +178,8 @@ class SurvivorOptimizer:
         max_per_team: int = MAX_PER_TEAM_DEFAULT,
         max_per_game: int = MAX_PER_GAME_DEFAULT,
         common_variance_share: float = COMMON_VARIANCE_SHARE,
+        wins_so_far: int = 0,
+        losses_so_far: int = 0,
         seed: int = 0,
     ) -> None:
         self.config = config
@@ -159,9 +198,26 @@ class SurvivorOptimizer:
         self.common_variance_share = float(np.clip(common_variance_share, 0.0, 0.9))
         self.seed = seed
 
+        # Head-to-head only: the record so far, and the record a bracket costs.
+        # Both games already played and games still to come count toward the
+        # same total, so a 1-0 start genuinely lowers what the rest must deliver.
+        self.wins_so_far = int(wins_so_far)
+        self.losses_so_far = int(losses_so_far)
+
         self._common_variance: dict[int, float] = {}
         self.projections = self._prune(projections)
         self.weeks = sorted(self.projections["week"].unique().tolist())
+
+        # Games left to play are the regular-season weeks still in the plan --
+        # not a count from `as_of_week`, which double-counts any week already
+        # played and would have us chasing a win total that is one too high.
+        survival = config.survival
+        self.regular_weeks = [w for w in self.weeks if not survival.is_playoff_week(w)]
+        self.playoff_weeks = [w for w in self.weeks if survival.is_playoff_week(w)]
+        total_games = self.wins_so_far + self.losses_so_far + len(self.regular_weeks)
+        self.wins_needed = playoff_cut_wins(
+            total_games, survival.playoff_berths, survival.teams_remaining
+        )
 
     # ------------------------------------------------------------------
     def _prune(self, projections: pd.DataFrame) -> pd.DataFrame:
@@ -190,10 +246,24 @@ class SurvivorOptimizer:
 
     # ------------------------------------------------------------------
     def _threshold_for_week(self, week: int) -> tuple[float, float, int]:
-        alive = self.config.survival.teams_alive_at(week)
-        opponents = max(1, alive - 1)
-        weeks_ahead = max(0, week - self.config.survival.as_of_week)
+        """The score you actually have to beat in `week`.
+
+        In a survivor league that is the lowest of everyone still alive, which
+        is a far softer bar than the average team. Head-to-head it is one
+        specific opponent -- a much harder bar, and harder again in the bracket,
+        where the opponent is there because they are good.
+        """
+        survival = self.config.survival
+        alive = survival.teams_alive_at(week)
+        opponents = survival.opponents_at(week)
+        weeks_ahead = max(0, week - survival.as_of_week)
         mean, sd = self.field.moments_at(week, weeks_ahead)
+
+        if survival.is_playoff_week(week):
+            mean, sd = playoff_opponent_moments(
+                mean, sd, survival.playoff_berths, survival.teams_remaining
+            )
+
         # Only idiosyncratic variance separates one team from another; the
         # league-wide component shifts every score together, us included.
         idiosyncratic = sd * np.sqrt(1.0 - self.common_variance_share)
@@ -221,6 +291,7 @@ class SurvivorOptimizer:
         best_plan: SeasonPlan | None = None
         best_objective = -np.inf
         seen_assignments: set[tuple] = set()
+        best_assignments: dict[int, pd.DataFrame] = {}
 
         for iteration in range(1, MAX_ITERATIONS + 1):
             assignment, status = self._solve_milp(weights)
@@ -231,16 +302,12 @@ class SurvivorOptimizer:
             plan.iterations = iteration
             plan.status = status
 
-            objective = sum(
-                log_survival_probability(
-                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
-                )
-                for wp in plan.weeks
-            )
+            objective = self._objective(plan)
             if objective > best_objective:
                 best_objective = objective
                 best_plan = plan
                 best_plan.best_iteration = iteration
+                best_assignments[iteration] = assignment.copy()
 
             if not self.use_survival_weights:
                 break
@@ -258,14 +325,7 @@ class SurvivorOptimizer:
                 break
             seen_assignments.add(signature)
 
-            new_weights = _normalise(
-                {
-                    wp.week: marginal_point_value(
-                        wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
-                    )
-                    for wp in plan.weeks
-                }
-            )
+            new_weights = _normalise(self._point_weights(plan))
             # Damped update, which slows the oscillation even though the
             # best-of-iterates rule above is what actually guarantees quality.
             blended = {
@@ -279,9 +339,218 @@ class SurvivorOptimizer:
                 break
 
         assert best_plan is not None  # the loop runs at least once
+        if self.use_survival_weights:
+            best_assignment = best_assignments[best_plan.best_iteration]
+            best_plan = self._polish(best_assignment, thresholds, weights, best_plan)
         best_plan.iterations = iteration
-        best_plan.survival_objective = best_objective
+        best_plan.survival_objective = self._objective(best_plan)
+        self._annotate(best_plan)
         return best_plan
+
+    # ------------------------------------------------------------------
+    def _polish(
+        self,
+        assignment: pd.DataFrame,
+        thresholds: dict[int, tuple[float, float, int]],
+        weights: dict[int, float],
+        plan: SeasonPlan,
+    ) -> SeasonPlan:
+        """Hill-climb the real objective by swapping one player between weeks.
+
+        Reweighting linearises a concave objective and then maximises the
+        linearisation over integer points, which lands on a vertex rather than
+        the interior optimum. In practice it overshoots: the weeks that looked
+        most valuable on the first pass get loaded until a point there is worth
+        far *less* than a point in the weeks it was taken from. On a flat test
+        board the marginal values ended up 8x apart, all in the direction of
+        hoarding for the bracket.
+
+        Best-of-iterates keeps that from being catastrophic but cannot repair
+        it, because every iterate has the same bias. So finish with an exact
+        local search on the true objective: swap the occupants of one slot
+        between two weeks, keep the move if the objective genuinely improves.
+        Each candidate move is evaluated on the objective itself, never on a
+        linearisation, so this can only help.
+        """
+        by_index = {int(r.index): r for r in assignment.itertuples(index=False)}
+        # (week, slot) -> projections row index currently assigned there.
+        current = {(int(r.week), str(r.slot)): int(r.index) for r in assignment.itertuples(index=False)}
+        frame = self.projections
+        # Fast lookup: which row is player p in week w, if he is a candidate there.
+        row_of = {
+            (str(r.player_id), int(r.week)): int(r.Index) for r in frame.itertuples()
+        }
+        player_of = frame["player_id"].astype(str).to_dict()
+
+        best = self._objective(plan)
+        improved = True
+        rounds = 0
+        while improved and rounds < POLISH_ROUNDS:
+            improved = False
+            rounds += 1
+            slots = [s.name for s in self.config.slots]
+            for slot in slots:
+                for week_a, week_b in itertools.combinations(self.weeks, 2):
+                    key_a, key_b = (week_a, slot), (week_b, slot)
+                    if key_a not in current or key_b not in current:
+                        continue
+                    idx_a, idx_b = current[key_a], current[key_b]
+                    # The same player, projected in the other week.
+                    swap_a = row_of.get((player_of[idx_a], week_b))
+                    swap_b = row_of.get((player_of[idx_b], week_a))
+                    if swap_a is None or swap_b is None:
+                        continue
+
+                    trial = dict(current)
+                    trial[key_a], trial[key_b] = swap_b, swap_a
+                    if not self._respects_caps(trial):
+                        continue
+                    candidate = self._plan_from_mapping(trial, thresholds, weights)
+                    score = self._objective(candidate)
+                    if score > best + POLISH_TOL:
+                        # Carry the solver's own bookkeeping across; the polish
+                        # rearranges an optimal assignment, it does not re-solve.
+                        candidate.status = plan.status
+                        candidate.best_iteration = plan.best_iteration
+                        best, current, plan = score, trial, candidate
+                        improved = True
+        if rounds > 1:
+            log.debug("polish improved the objective over %d rounds", rounds - 1)
+        return plan
+
+    def _respects_caps(self, mapping: dict[tuple[int, str], int]) -> bool:
+        """Re-check the per-team and per-game limits after a swap."""
+        frame = self.projections
+        per_week_team: dict[tuple[int, str], int] = {}
+        per_week_game: dict[tuple[int, str], int] = {}
+        for (week, _slot), idx in mapping.items():
+            row = frame.loc[idx]
+            tk = (week, str(row["team"]))
+            gk = (week, str(row["game_key"]))
+            per_week_team[tk] = per_week_team.get(tk, 0) + 1
+            per_week_game[gk] = per_week_game.get(gk, 0) + 1
+            if per_week_team[tk] > self.max_per_team:
+                return False
+            if per_week_game[gk] > self.max_per_game:
+                return False
+        return True
+
+    def _plan_from_mapping(
+        self,
+        mapping: dict[tuple[int, str], int],
+        thresholds: dict[int, tuple[float, float, int]],
+        weights: dict[int, float],
+    ) -> SeasonPlan:
+        rows = [
+            {"week": week, "slot": slot, "index": idx}
+            for (week, slot), idx in mapping.items()
+        ]
+        return self._build_plan(pd.DataFrame(rows), thresholds, weights)
+
+    # ------------------------------------------------------------------
+    def _annotate(self, plan: SeasonPlan) -> None:
+        """Attach the numbers a head-to-head manager actually reads.
+
+        `cumulative_survival` is the survivor headline and is actively
+        misleading here: the product of sixteen near-coin-flips rounds to zero
+        no matter how good the plan is, because losing some regular-season games
+        is not merely survivable, it is expected.
+        """
+        if not self.config.survival.is_head_to_head:
+            return
+        plan.head_to_head = True
+        win_probs, _ = self._win_probabilities(plan)
+        plan.wins_needed = self.wins_needed
+        plan.expected_wins = self.wins_so_far + float(sum(win_probs))
+        plan.playoff_probability = playoff_probability(
+            win_probs, self.wins_so_far, self.wins_needed
+        )
+        bracket = 1.0
+        for wp in plan.weeks:
+            if self.config.survival.is_playoff_week(wp.week):
+                bracket *= wp.survival_probability
+        plan.title_probability = plan.playoff_probability * bracket
+
+    # ------------------------------------------------------------------
+    def _win_probabilities(self, plan: SeasonPlan) -> tuple[list[float], list[WeekPlan]]:
+        """Per-week P(beat this week's opponent), split regular season / bracket."""
+        regular = [
+            wp for wp in plan.weeks if not self.config.survival.is_playoff_week(wp.week)
+        ]
+        return [wp.survival_probability for wp in regular], regular
+
+    def _objective(self, plan: SeasonPlan) -> float:
+        """What the plan is actually worth, in logs so the solver can sum it.
+
+        Survivor: you must not finish last in *any* week, so it is the product
+        of every week's survival probability.
+
+        Head-to-head: P(title) = P(make the bracket) * P(win each playoff week).
+        The regular-season weeks enter only through the first factor, which is
+        why a 40-point win there is worth exactly as much as a 1-point win and
+        no more -- the thing a survivor objective cannot express, and the reason
+        it wanted to spend studs on games that were already won.
+        """
+        survival = self.config.survival
+        if not survival.is_head_to_head:
+            return sum(
+                log_survival_probability(
+                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
+                )
+                for wp in plan.weeks
+            )
+
+        win_probs, _ = self._win_probabilities(plan)
+        berth = playoff_probability(win_probs, self.wins_so_far, self.wins_needed)
+        total = np.log(max(berth, 1e-12))
+        for wp in plan.weeks:
+            if survival.is_playoff_week(wp.week):
+                total += log_survival_probability(
+                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
+                )
+        return float(total)
+
+    def _point_weights(self, plan: SeasonPlan) -> dict[int, float]:
+        """Marginal value of one projected point, week by week.
+
+        Head-to-head splits into two regimes. A playoff week keeps the survivor
+        shape -- lose and you are done -- so a point is worth
+        ``phi(z)/Phi(z)``. A regular-season week is worth only what it does to
+        the odds of qualifying: ``dP(berth)/dp_w * phi(z)``, which is largest
+        when the season is on the bubble and falls away once the berth is close
+        to settled either way.
+        """
+        survival = self.config.survival
+        if not survival.is_head_to_head:
+            return {
+                wp.week: marginal_point_value(
+                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
+                )
+                for wp in plan.weeks
+            }
+
+        win_probs, regular = self._win_probabilities(plan)
+        berth = max(
+            playoff_probability(win_probs, self.wins_so_far, self.wins_needed), 1e-12
+        )
+        sensitivity = berth_sensitivity(win_probs, self.wins_so_far, self.wins_needed)
+
+        weights: dict[int, float] = {}
+        for wp in plan.weeks:
+            denom = float(np.hypot(wp.idiosyncratic_sd, wp.threshold_sd))
+            if denom <= 0:
+                weights[wp.week] = 0.0
+                continue
+            if survival.is_playoff_week(wp.week):
+                weights[wp.week] = marginal_point_value(
+                    wp.mean, wp.idiosyncratic_sd, wp.threshold_mean, wp.threshold_sd
+                )
+            else:
+                index = regular.index(wp)
+                z = (wp.mean - wp.threshold_mean) / denom
+                dp_dmu = float(norm.pdf(z)) / denom
+                weights[wp.week] = sensitivity[index] * dp_dmu / berth
+        return weights
 
     # ------------------------------------------------------------------
     def _solve_milp(self, weights: dict[int, float]) -> tuple[pd.DataFrame | None, str]:
@@ -324,7 +593,8 @@ class SurvivorOptimizer:
                 f"fill_{week}_{slot_name}",
             )
 
-        # Usage cap: the constraint that makes this a survivor league.
+        # Usage cap: the one-start-per-season rule, and the only reason any of
+        # this is harder than starting your best player every week.
         limit = self.config.survival.player_reuse_limit
         player_of_index = frame["player_id"].to_dict()
         per_player: dict[str, list[pulp.LpVariable]] = {}
@@ -464,6 +734,11 @@ class SurvivorOptimizer:
                     survival_probability=prob,
                     point_weight=weights.get(week, 1.0),
                     teams_alive=alive,
+                    phase=(
+                        "PLAYOFF"
+                        if self.config.survival.is_playoff_week(week)
+                        else "regular"
+                    ),
                 )
             )
 

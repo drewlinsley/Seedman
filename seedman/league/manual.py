@@ -140,6 +140,8 @@ class ManualAdapter:
             teams_remaining=int(raw.get("teams_remaining", 12)),
             available_players=available,
             observed_field_scores=[float(x) for x in (raw.get("observed_field_scores") or [])],
+            wins=int((raw.get("record") or {}).get("wins", 0)),
+            losses=int((raw.get("record") or {}).get("losses", 0)),
             source=f"manual:{path.name}",
         )
 
@@ -165,6 +167,11 @@ used_players: []
 # Leave empty if you may pick any NFL player each week (the usual survivor rule).
 # List your roster here instead if your league drafts.
 available_players: []
+
+# Head-to-head leagues only: your record so far.
+record:
+  wins: 0
+  losses: 0
 
 # Optional: what the other teams actually scored, week by week, all teams pooled.
 # Supplying even a couple of weeks of real scores makes the weekly cut line --

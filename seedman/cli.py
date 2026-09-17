@@ -310,20 +310,31 @@ def _print_plan(plan, config: LeagueConfig) -> None:
     print("=" * 72)
     picks = pd.DataFrame(first.picks)
     print(picks.to_string(index=False))
+    h2h = config.survival.is_head_to_head
+    bar = "opponent" if h2h else "cut line"
+    verb = "win" if h2h else "survive"
     print(
         f"\n  projected {first.mean:.1f} +/- {first.sd:.1f} | "
-        f"cut line ~{first.threshold_mean:.1f} | "
-        f"survive {100 * first.survival_probability:.1f}%"
+        f"{bar} ~{first.threshold_mean:.1f} | "
+        f"{verb} {100 * first.survival_probability:.1f}%"
     )
 
     print("\n" + "=" * 72)
     print(f"SEASON PLAN ({len(plan.weeks)} weeks, solved in {plan.iterations} iterations)")
     print("=" * 72)
     print(plan.summary_frame().to_string(index=False))
-    print(
-        f"\n  P(surviving all {len(plan.weeks)} planned weeks) = "
-        f"{100 * plan.cumulative_survival:.1f}%"
-    )
+    if h2h:
+        print(
+            f"\n  record {plan.expected_wins:.1f} wins projected, "
+            f"{plan.wins_needed} needed for a bracket spot"
+        )
+        print(f"  P(make the playoffs)  = {100 * plan.playoff_probability:.1f}%")
+        print(f"  P(win it all)         = {100 * plan.title_probability:.1f}%")
+    else:
+        print(
+            f"\n  P(surviving all {len(plan.weeks)} planned weeks) = "
+            f"{100 * plan.cumulative_survival:.1f}%"
+        )
     print(f"  total projected points over the horizon = {plan.total_points:.1f}")
 
     print("\n" + "-" * 72)

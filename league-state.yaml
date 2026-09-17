@@ -6,14 +6,20 @@
 
 current_week: 2
 
-# 12 to start, one cut after week 1.
-teams_remaining: 11
+# Nobody is eliminated in this format; this is just the league size.
+teams_remaining: 12
+
+# Week 1: beat Josh Schorr, who put up 82.46.
+record:
+  wins: 1
+  losses: 0
 
 # Week 1 — the lineup recommended and confirmed ("Ok I like that lineup").
-# ASSUMED to be what was actually entered. If the FLEX was swapped at the buzzer
-# (Tee Higgins / Ladd McConkey / Chris Olave were the alternatives priced), fix
-# the last line here and re-run `seedman optimize` — everything downstream
-# follows from this list.
+# ASSUMED, AND PROBABLY WRONG. These six scored 68.30, and the week-1 opponent
+# scored 82.46 in a head-to-head league that we won. You cannot win with 68.30
+# against 82.46, so whatever was actually entered is not this. Replace the list
+# below with the real six — in a one-start-per-season league a wrong ledger
+# silently poisons every week from here to the playoffs.
 used_players:
   - Dak Prescott       # QB  DAL  14.40
   - Cam Skattebo       # RB  NYG  14.10

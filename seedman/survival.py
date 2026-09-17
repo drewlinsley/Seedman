@@ -40,6 +40,12 @@ from scipy.stats import norm
 
 DEFAULT_SAMPLES = 40_000
 
+# Share of a lineup's score variance that is persistent team skill rather than
+# week-to-week noise. Weekly lineup SD runs ~22 points while season-long team
+# quality spreads maybe 9, so roughly 9^2 / (9^2 + 20^2). Only this slice is
+# selected on when a team makes the playoffs.
+BETWEEN_TEAM_VARIANCE_SHARE = 0.17
+
 
 @dataclass(frozen=True)
 class FieldModel:
@@ -147,3 +153,121 @@ def estimate_field_from_projections(
     managers field roughly the lineup our own optimizer would call mid-tier.
     """
     return FieldModel(mean=replacement_lineup_mean, sd=replacement_lineup_sd)
+
+
+# ----------------------------------------------------------------------
+# Head-to-head: making a bracket, then winning it
+# ----------------------------------------------------------------------
+# A survivor league asks one question every week ("am I last?"). A head-to-head
+# league asks two different ones, and conflating them is how you end up either
+# hoarding into a 4-9 record or spending into a first-round exit:
+#
+#   1. Regular season -- do I finish with enough WINS to make the bracket? One
+#      blowout loss costs exactly as much as a one-point loss, and a 60-point
+#      win banks nothing. What matters is P(win), summed.
+#   2. Playoffs -- do I win THIS game? Now a loss ends the season, so the
+#      objective goes back to the survivor shape: maximise log P(win) and treat
+#      an extra point as most valuable when the game is closest.
+#
+# P(title) = P(make the bracket) * prod over playoff weeks of P(win that week),
+# so the log objective is a sum and the solver's existing per-week weights carry
+# it unchanged. Only the weights themselves differ between the two phases.
+
+
+def poisson_binomial_pmf(probabilities: list[float]) -> np.ndarray:
+    """Distribution of total wins from independent games with unequal odds."""
+    dist = np.zeros(len(probabilities) + 1)
+    dist[0] = 1.0
+    for index, p in enumerate(probabilities, start=1):
+        p = float(np.clip(p, 0.0, 1.0))
+        updated = np.zeros_like(dist)
+        updated[0] = dist[0] * (1.0 - p)
+        updated[1 : index + 1] = dist[1 : index + 1] * (1.0 - p) + dist[0:index] * p
+        dist = updated
+    return dist
+
+
+def playoff_cut_wins(total_games: int, berths: int, teams: int) -> int:
+    """Wins needed for a bracket spot, read off the league's own win spread.
+
+    Every game in the league is someone's win, so team records are binomial
+    around .500. The cut is the smallest total that only `berths` teams are
+    expected to reach.
+    """
+    if berths >= teams:
+        return 0
+    from scipy.stats import binom
+
+    for wins in range(total_games, -1, -1):
+        if teams * binom.sf(wins - 1, total_games, 0.5) > berths:
+            return min(total_games, wins + 1)
+    return 0
+
+
+def playoff_probability(
+    weekly_win_probabilities: list[float], wins_so_far: int, wins_needed: int
+) -> float:
+    """P(finishing with enough wins), given games already banked."""
+    still_needed = wins_needed - wins_so_far
+    if still_needed <= 0:
+        return 1.0
+    if still_needed > len(weekly_win_probabilities):
+        return 0.0
+    pmf = poisson_binomial_pmf(weekly_win_probabilities)
+    return float(pmf[still_needed:].sum())
+
+
+def berth_sensitivity(
+    weekly_win_probabilities: list[float], wins_so_far: int, wins_needed: int
+) -> list[float]:
+    """d P(make the bracket) / d p_w, for each regular-season week.
+
+    P is linear in any single `p_w` -- win that game or do not -- so the exact
+    derivative is the chance the *other* games land exactly one win short. That
+    peaks when the season is genuinely on the bubble and collapses toward zero
+    once you are safely in or realistically out, which is the behaviour we want:
+    a locked-up berth should stop competing with the playoff weeks for players.
+    """
+    still_needed = wins_needed - wins_so_far
+    out = []
+    for index in range(len(weekly_win_probabilities)):
+        rest = weekly_win_probabilities[:index] + weekly_win_probabilities[index + 1 :]
+        pmf = poisson_binomial_pmf(rest)
+        target = still_needed - 1
+        out.append(float(pmf[target]) if 0 <= target < len(pmf) else 0.0)
+    return out
+
+
+def playoff_opponent_moments(
+    field_mean: float,
+    field_sd: float,
+    berths: int,
+    teams: int,
+    between_team_share: float = BETWEEN_TEAM_VARIANCE_SHARE,
+) -> tuple[float, float]:
+    """A bracket opponent is not an average team -- they qualified.
+
+    The selection acts on team *quality*, not on a single week's luck, so only
+    the between-team slice of the variance gets truncated. Conditioning the full
+    weekly spread instead would be badly wrong in the direction that flatters
+    hoarding: on a field of (80, 22) it prices the playoff bar at 97.6 rather
+    than 86.4, and a bar that high makes almost any amount of banking look
+    justified.
+
+    `between_team_share` is the fraction of total variance that is persistent
+    skill rather than week-to-week noise. It is an estimate, not a fit -- with
+    only a single opponent box score on hand there is nothing to fit it against
+    -- so it is surfaced in `configs/league.yaml` as an assumption.
+    """
+    if berths >= teams or field_sd <= 0:
+        return field_mean, field_sd
+    share = float(np.clip(between_team_share, 0.0, 1.0))
+    quality_sd = field_sd * np.sqrt(share)
+    noise_var = (field_sd**2) * (1.0 - share)
+
+    p = berths / teams
+    z = norm.ppf(1.0 - p)
+    lam = norm.pdf(z) / p                       # inverse Mills ratio
+    mean = field_mean + quality_sd * lam
+    quality_var = (quality_sd**2) * (1.0 + z * lam - lam**2)
+    return float(mean), float(np.sqrt(max(quality_var + noise_var, 1e-9)))

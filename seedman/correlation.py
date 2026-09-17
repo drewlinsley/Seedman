@@ -5,7 +5,7 @@ simplification available here, and the optimizer will actively exploit it: given
 independence, stacking a quarterback with his own receiver, tight end and kicker
 looks like free expected points at no extra risk.  It is not.  Those four
 outcomes rise and fall together, so a stacked lineup has a much fatter left tail
--- and in a survivor league the left tail is the entire game.
+-- and in a single-elimination playoff week the left tail is the entire game.
 
 The coefficients below are the standard, well-replicated shape of NFL fantasy
 correlation:

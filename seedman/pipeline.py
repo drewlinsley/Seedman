@@ -171,6 +171,20 @@ def calibrate_field(
             continue
 
         depth_used = max(0, week - config.survival.as_of_week)
+        if config.survival.is_playoff_week(week):
+            # A rival who understands the one-start rule banks for the bracket
+            # exactly as we do, so his playoff lineup is NOT the 21st-best
+            # option left over after fifteen weeks of greed. Assuming otherwise
+            # hands us an edge nobody is actually giving away, and it does so in
+            # precisely the weeks the plan is built around -- it made our
+            # week-16/17 win odds read 74%/71% against a field we had modelled
+            # into the ground. Credit him with having held back roughly a
+            # bracket's worth of starters.
+            reserved_weeks = max(
+                1, config.survival.final_week - config.survival.regular_season_final_week
+            )
+            depth_used = max(0, depth_used - reserved_weeks * len(config.slots))
+
         lineup_mean = 0.0
         lineup_var = 0.0
         for slot in config.slots:
@@ -273,6 +287,8 @@ def run(
         used_players=state.used_players,
         hold_players=hold_players,
         use_survival_weights=use_survival_weights,
+        wins_so_far=state.wins,
+        losses_so_far=state.losses,
         candidates_per_slot_week=candidates,
         max_per_team=max_per_team,
         max_per_game=max_per_game,
@@ -297,6 +313,10 @@ def contest_end_week(config: LeagueConfig, state: LeagueState) -> int:
     will never be played.
     """
     survival = config.survival
+    # Head-to-head runs to the final whistle: nobody is eliminated early, and the
+    # playoff weeks are the whole point of planning, so never truncate them away.
+    if survival.is_head_to_head:
+        return survival.final_week
     weeks_until_two_left = max(
         0, (state.teams_remaining - 2) // max(1, survival.eliminations_per_week)
     )

@@ -1,5 +1,5 @@
 ﻿# =====================================================================
-# Rocco Siffredi survivor league
+# Rocco Siffredi — head-to-head league, one start per player per season
 # =====================================================================
 # IMPORTANT: the values below marked [ASSUMED] could not be read from the
 # league site (https://rocco-siffredi.onrender.com is blocked by this
@@ -14,19 +14,29 @@ league:
   season: 2026
 
 survival:
-  # [CONFIRMED by format] Each NFL player may be started this many times all
-  # season. This single number is what creates the "spend now vs. save" tension.
+  # [CONFIRMED by the commissioner] Not a survivor pool. You play one opponent a
+  # week, nobody is eliminated weekly, and the one rule that makes this league
+  # unusual is that each NFL player may be started only once all season.
+  mode: head_to_head
+
+  # [CONFIRMED] Each NFL player may be started this many times all season. This
+  # single number is what creates the "spend now vs. save" tension, and in a
+  # head-to-head league it is the ONLY thing that does.
   player_reuse_limit: 1
 
-  # [ASSUMED] Teams still alive, including you, as of `as_of_week`.
-  teams_remaining: 12
-  as_of_week: 1
-
-  # [ASSUMED] How many teams get cut each week.
-  eliminations_per_week: 1
-
-  # [ASSUMED] Last week of the survival contest.
+  # [CONFIRMED] Roughly 15 regular-season weeks, then a two-week playoff.
+  regular_season_final_week: 15
   final_week: 17
+
+  # [ASSUMED] Teams in the league, and how many make the bracket. Half the
+  # league is the usual split; this drives how many wins a berth costs, which
+  # drives how much a regular-season point is worth against a playoff point.
+  teams_remaining: 12
+  playoff_berths: 6
+
+  as_of_week: 1
+  # Unused in head_to_head mode, kept so the survivor path still validates.
+  eliminations_per_week: 1
 
 roster:
   # [CONFIRMED from the league site, week 1 lineup screen] Six slots, no bench,
@@ -68,5 +78,6 @@ assumptions:
   - "No yardage bonuses — CONFIRMED by reconciling a week 1 lineup card to the cent (82.46)."
   - "Lineup CONFIRMED from the league site: QB/RB/WR/WR/TE/FLEX, no kicker, no defense."
   - "FLEX takes RB and WR — both CONFIRMED from lineup cards. TE eligibility assumed."
-  - "12 teams alive as of week 2, one elimination per week, through week 17 — NOT verified."
+  - "Head-to-head with a 2-week playoff CONFIRMED; 12 teams and 6 playoff berths are NOT verified, and both move how much banking a stud is worth."
+  - "Playoff opponents are modelled as better than average (a qualified team), using a 0.17 between-team variance share that is an estimate, not a fit."
   - "Each player is usable exactly once per season (player_reuse_limit: 1)."

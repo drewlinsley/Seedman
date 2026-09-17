@@ -22,7 +22,7 @@ def test_every_slot_is_filled_every_week(config: LeagueConfig, projections):
 
 
 def test_no_player_is_started_twice(config: LeagueConfig, projections):
-    """The defining constraint of a survivor league."""
+    """The defining constraint of this league, in either format."""
     plan = solve(config, projections)
     used = [pick["player_id"] for week in plan.weeks for pick in week.picks]
     assert len(used) == len(set(used))
@@ -100,11 +100,18 @@ def test_survival_weighting_never_loses_to_flat_weights(config: LeagueConfig, pr
     assert survival.cumulative_survival >= points.cumulative_survival - 1e-9
 
 
-def test_point_weight_rises_as_the_league_shrinks(config: LeagueConfig, projections):
-    """Fewer opponents means a higher cut line, so late points matter more."""
+def test_the_cut_line_rises_as_the_league_shrinks(config: LeagueConfig, projections):
+    """Fewer opponents means a higher bar: the lowest of 3 beats the lowest of 11.
+
+    This used to assert on the realised `point_weight` instead, which the
+    post-solve polish now equalises across weeks -- as an optimum should. The
+    rising cut line is the mechanism that makes late points matter; the weight
+    converging is evidence the optimizer has finished acting on it, not evidence
+    that it stopped caring.
+    """
     plan = solve(config, projections)
-    weights = [w.point_weight for w in plan.weeks]
-    assert weights[-1] > weights[0]
+    cut_lines = [w.threshold_mean for w in plan.weeks]
+    assert cut_lines[-1] > cut_lines[0]
 
 
 def test_stars_are_saved_for_the_week_that_actually_needs_them(config: LeagueConfig, projections):

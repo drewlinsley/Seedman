@@ -1,44 +1,52 @@
 # seedman
 
-Lineup optimizer for a **survivor fantasy football league** — the format where you
-field a new lineup every week, each NFL player can only be used **once all
-season**, and the lowest score each week is eliminated.
+Lineup optimizer for a fantasy football league with one unusual rule: **each NFL
+player may be started only once all season.** You field a new lineup every week
+and can never go back to a player you have spent.
 
-That format makes the obvious strategy wrong. Starting your best available player
-every week maximises points and loses the league: you arrive at week 11 with an
-empty cupboard and three sharp opponents left. But hoarding is equally wrong, because
-you have to still be alive to spend what you saved.
+That rule makes the obvious strategy wrong. Starting your best available player
+every week maximises points and loses the league — you arrive at the playoffs
+with an empty cupboard. But hoarding is equally wrong: you have to still be in
+contention to spend what you saved.
 
-`seedman` prices that tradeoff instead of guessing at it.
+The league this is built for (`configs/league.yaml`) is **head-to-head**: one
+opponent a week, roughly 15 regular-season weeks, then a two-week playoff. The
+survivor format — lowest score eliminated weekly — is also supported via
+`survival.mode`, and the two want genuinely different lineups. See
+[The format decides everything](#the-format-decides-everything).
 
-Planning weeks 2–12 of 2026, the survival objective gives up 6.3 projected points
-to buy a 6-point jump in modelled survival odds (34.1% → 40.1%). Read that as a
-statement about the objective, not a measured edge: both numbers come from the
-model scoring itself.
-
-**Measured against real seasons it does not hold up.** The projections beat every
-naive baseline on ranking, including on held-out data, and a greedy lineup built
-on them won 19.5% of simulated 2024 leagues against a coin flip's 8.3%. But
-adding the survival weighting *cut* that to 3.2%, and it finished last of three
-strategies in all three seasons simulated. Details and caveats in
-[What the backtest says](#what-the-backtest-says). Until that is overturned,
-`--no-survival` is the right default.
+`seedman` prices that tradeoff instead of guessing at it, and the price turns out
+to depend entirely on the format. In head-to-head the plan back-loads hard — the
+two playoff weeks get the best lineups on the board, while the regular season is
+run at whatever strength keeps the record above the bracket line:
 
 ```
- week  projected    sd  cut_line  survive_pct  teams_alive  point_weight
-    2      84.94 21.61     49.47         94.9           12        0.8161
-    3      81.13 23.68     44.68         93.7           11        0.8908
+ week  projected    sd  opponent  win_pct   phase  point_weight
+    2      60.14 17.33     63.90     44.4 regular        0.886
+    3      64.05 17.93     64.33     49.6 regular        0.811
    ...
-   11      79.45 21.01     49.37         89.9            3        1.3419
-   12      89.42 25.49     61.64         82.1            2        1.6976
+   15      24.81 10.51     22.56     55.2 regular        1.113
+   16      39.59 14.66     26.91     74.2 PLAYOFF        0.598
+   17      37.27 14.50     26.60     70.9 PLAYOFF        0.669
 ```
 
-That last column is the whole idea: a projected point in week 12 is worth **2.1x**
-a point in week 2, because by then only two teams remain and the cut line has
-climbed from 49 to 62. So the optimizer spends cheap weeks on cheap players and
-banks its stars for the weeks that decide the league.
+Run the same board as a survivor pool and the plan inverts: it spends early,
+because a week you might be eliminated in is worth more than a week you might
+never reach. Neither answer is a knob — both fall out of the objective.
 
----
+**A warning about that table.** Those playoff win percentages are the number most
+likely to be wrong, and they are wrong in the direction that flatters the whole
+strategy. They depend on a model of what your opponent starts in week 16, and
+nothing in this repo has ever observed one. See
+[The format decides everything](#the-format-decides-everything) for the two
+corrections already applied and why the residual uncertainty still points the
+same way.
+
+**On the projections themselves, measured against real seasons:** they beat every
+naive baseline on ranking, including on held-out 2025 — except at RB and WR in
+the season's first few weeks, where a plain prior-season average is better. That
+is a real defect with a diagnosed cause, and it is not fixed. See
+[What the backtest says](#what-the-backtest-says).
 
 ## Quickstart
 
@@ -296,6 +304,74 @@ seedman calibrate --fit 2021 2022 2023 2024 --validate 2025 --tune-rates
 writes `configs/fitted.yaml`. Buckets thinner than 60 observations keep their
 prior rather than trusting a point estimate off three cases, and every value
 records which it was.
+
+## The format decides everything
+
+This started life as a survivor-pool optimizer, and the league turned out not to
+be a survivor pool. The two formats share one rule -- **each NFL player may be
+started once all season** -- and disagree about everything that follows from it.
+
+| | survivor | head-to-head (this league) |
+|---|---|---|
+| who you must beat | the lowest score among everyone alive | one specific opponent |
+| a bad week costs | your season | one game |
+| week 17 | probably never happens | the final |
+| banking a star for the playoffs | a way to get eliminated in September | the entire strategy |
+
+The bar is the whole difference. The lowest of eleven scores is a *soft* target
+you clear ~97% of the time; one named opponent is a coin flip. Running the
+survivor objective on a head-to-head league quietly optimises for a threat that
+does not exist, and it will spend a stud to turn a 95% week into a 98% week.
+
+`survival.mode: head_to_head` switches the objective to what the format actually
+rewards:
+
+```
+P(title) = P(make the bracket) x P(win week 16) x P(win week 17)
+```
+
+Two regimes fall out of that, and they want opposite things:
+
+- **Regular season.** Only the *record* matters, so a 40-point win is worth
+  exactly as much as a 1-point win. The value of a point is
+  `dP(berth)/dp_w * phi(z_w)`, which peaks when the season is on the bubble and
+  decays to nothing once a berth is close to settled either way. `playoff_cut_wins`
+  reads the bar off the league's own binomial win spread: 8 wins from 15 games
+  for a 6-of-12 bracket.
+- **Playoffs.** Lose and you are done, so the objective reverts to the survivor
+  shape -- maximise `log P(win)`, and a point is worth `phi(z)/Phi(z)`.
+
+Two corrections were needed to keep this honest, both of which had been
+flattering the case for hoarding:
+
+1. **A playoff opponent is better than average, but not by as much as it first
+   looked.** Qualifying selects on *skill*, not on one week's luck, so only the
+   between-team slice of variance may be truncated. Conditioning the full weekly
+   spread priced the bracket bar at 97.6 against a field of 80; conditioning only
+   the skill component puts it at 87.2.
+2. **Your opponent banks for the bracket too.** The field model ages a rival's
+   lineup by one slot a week, which by week 17 had him starting his 21st-best
+   option while we started our best -- a 74% win probability against a field we
+   had modelled into the ground. Anyone who knows the one-start rule holds
+   players back exactly as we do, so playoff-week opponents are credited with a
+   bracket's worth of reserves.
+
+### The solver overshoots, so it finishes with a local search
+
+Reweighting linearises a concave objective and maximises the linearisation over
+integer points, which lands on a vertex rather than the interior optimum. It
+overshoots in a specific direction: the weeks that look most valuable on the
+first pass get loaded until a point there is worth far *less* than a point in
+the weeks it was taken from. On a flat test board the marginal values ended up
+**8x apart**, all in the direction of hoarding for the bracket.
+
+Best-of-iterates cannot repair that, because every iterate shares the bias. So
+the solve finishes with an exact local search on the true objective -- swap the
+occupants of one slot between two weeks, keep the move only if the objective
+genuinely improves. Candidate moves are scored on the objective itself, never on
+a linearisation, so the pass can only help. Afterwards the marginal values sit
+within 4x, which is what an optimum should look like: **not "playoff weeks are
+worth more" -- that is the input, not the output.**
 
 ## Read this before you trust a lineup
 

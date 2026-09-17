@@ -1,6 +1,6 @@
 """Weekly fantasy-point projections: mean and spread, per player per week.
 
-The model is deliberately simple and auditable, because in a survivor league the
+The model is deliberately simple and auditable, because under a one-start rule the
 optimizer's *ranking* of players matters far more than the third decimal place
 of any one projection.  Three ingredients:
 

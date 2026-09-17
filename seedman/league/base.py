@@ -27,12 +27,18 @@ class LeagueState:
     # Observed weekly scores of the league's teams, when the site exposes them.
     # Far better than guessing at the field's strength.
     observed_field_scores: list[float] = field(default_factory=list)
+    # Head-to-head only: your record so far. Drives how many of the remaining
+    # weeks you still have to win, and therefore how much a regular-season
+    # point is worth against a playoff-week point.
+    wins: int = 0
+    losses: int = 0
     source: str = "unknown"
 
     def describe(self) -> str:
         pool = "entire NFL" if not self.available_players else f"{len(self.available_players)} rostered"
         return (
-            f"week {self.current_week} | {self.teams_remaining} teams alive | "
+            f"week {self.current_week} | {self.wins}-{self.losses} | "
+            f"{self.teams_remaining} teams | "
             f"{len(self.used_players)} players burned | pool: {pool} | source: {self.source}"
         )
 

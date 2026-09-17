@@ -115,28 +115,80 @@ class ScoringRules:
 
 @dataclass(frozen=True)
 class SurvivalFormat:
-    """How the league eliminates teams and how player inventory is consumed."""
+    """How the league decides who advances, and how player inventory is consumed.
+
+    Two shapes, and the difference decides everything about when to spend a
+    player. In `survivor` the field shrinks and the bar each week is the *lowest*
+    score among everyone still alive, so one bad week ends the season. In
+    `head_to_head` nobody is eliminated weekly; you play one opponent, and the
+    bar is that single opponent's score. Missing the playoffs takes a bad
+    *record*, not a bad week, which is what makes banking a stud for a playoff
+    week a real strategy rather than a way to get knocked out in September.
+    """
 
     # How many times a single NFL player may be started across the whole season.
-    # The defining constraint of a survivor league; 1 means "burn him once".
+    # 1 means "burn him once", and it is what creates the spend-vs-save tension
+    # in either mode.
     player_reuse_limit: int = 1
-    # Teams still alive *including you*, as of `as_of_week`.
+    # "survivor" or "head_to_head".
+    mode: str = "survivor"
+    # Teams in the league (survivor: still alive *including you*, as of `as_of_week`).
     teams_remaining: int = 12
     as_of_week: int = 1
     eliminations_per_week: int = 1
-    # Final week of the survival contest (regular season default).
+    # Last week that counts, inclusive of any playoff weeks.
     final_week: int = 17
+    # head_to_head only: last week of the regular season, and how many teams
+    # make the bracket. Weeks after this and up to `final_week` are playoffs.
+    regular_season_final_week: int = 15
+    playoff_berths: int = 6
+
+    HEAD_TO_HEAD = "head_to_head"
+    SURVIVOR = "survivor"
 
     def validate(self) -> None:
         if self.player_reuse_limit < 1:
             raise ConfigError("player_reuse_limit must be >= 1")
         if self.teams_remaining < 2:
             raise ConfigError("teams_remaining must be >= 2")
-        if self.eliminations_per_week < 1:
-            raise ConfigError("eliminations_per_week must be >= 1")
+        if self.mode not in (self.SURVIVOR, self.HEAD_TO_HEAD):
+            raise ConfigError(
+                f"survival.mode must be 'survivor' or 'head_to_head', got {self.mode!r}"
+            )
+        if self.mode == self.SURVIVOR and self.eliminations_per_week < 1:
+            raise ConfigError("eliminations_per_week must be >= 1 in survivor mode")
+        if self.mode == self.HEAD_TO_HEAD:
+            if not 1 <= self.playoff_berths < self.teams_remaining:
+                raise ConfigError(
+                    "playoff_berths must be between 1 and teams_remaining - 1"
+                )
+            if self.regular_season_final_week > self.final_week:
+                raise ConfigError(
+                    "regular_season_final_week cannot be after final_week"
+                )
+
+    @property
+    def is_head_to_head(self) -> bool:
+        return self.mode == self.HEAD_TO_HEAD
+
+    def is_playoff_week(self, week: int) -> bool:
+        """Weeks you must win outright, as opposed to merely win often enough."""
+        return self.is_head_to_head and week > self.regular_season_final_week
+
+    def opponents_at(self, week: int) -> int:
+        """How many teams you have to outscore in `week`.
+
+        The whole difference between the two formats in one number: one named
+        opponent, or everyone else still breathing.
+        """
+        if self.is_head_to_head:
+            return 1
+        return max(1, self.teams_alive_at(week) - 1)
 
     def teams_alive_at(self, week: int) -> int:
         """Project how many teams are still alive at the start of `week`."""
+        if self.is_head_to_head:
+            return self.teams_remaining
         weeks_elapsed = max(0, week - self.as_of_week)
         alive = self.teams_remaining - weeks_elapsed * self.eliminations_per_week
         return max(2, alive)
@@ -217,10 +269,15 @@ class LeagueConfig:
 
         survival = SurvivalFormat(
             player_reuse_limit=int(survival_raw.get("player_reuse_limit", 1)),
+            mode=str(survival_raw.get("mode", "survivor")),
             teams_remaining=int(survival_raw.get("teams_remaining", 12)),
             as_of_week=int(survival_raw.get("as_of_week", 1)),
             eliminations_per_week=int(survival_raw.get("eliminations_per_week", 1)),
             final_week=int(survival_raw.get("final_week", 17)),
+            regular_season_final_week=int(
+                survival_raw.get("regular_season_final_week", 15)
+            ),
+            playoff_berths=int(survival_raw.get("playoff_berths", 6)),
         )
 
         cfg = cls(
