@@ -441,7 +441,7 @@ class SurvivorOptimizer:
                     trial[key_a], trial[key_b] = moved_b, moved_a
                     if not self._respects_caps(trial):
                         continue
-                    if self.start and not self._respects_forced_starts(trial):
+                    if not self._respects_manual_constraints(trial):
                         continue
 
                     rebuilt = {}
@@ -464,9 +464,17 @@ class SurvivorOptimizer:
             log.debug("polish improved the objective over %d rounds", rounds - 1)
         return self._finalise(plan)
 
-    def _respects_forced_starts(self, mapping: dict[tuple[int, str], int]) -> bool:
-        """A forced start must survive the polish; it is a constraint, not a hint."""
-        if not self.weeks:
+    def _respects_manual_constraints(self, mapping: dict[tuple[int, str], int]) -> bool:
+        """Holds and forced starts must survive the polish.
+
+        The MILP honours both, but the polish then moves players between weeks on
+        its own judgement, and judgement is exactly what these two flags exist to
+        overrule. Without this check it will happily swap a held player back into
+        the week you barred him from -- which is how a Thursday starter and a
+        player explicitly sat both reappeared in a lineup that printed
+        "holding week 2 players from BUF, DET" three lines above them.
+        """
+        if not self.weeks or not (self.start or self.hold):
             return True
         first = self.weeks[0]
         present = {
@@ -474,7 +482,7 @@ class SurvivorOptimizer:
             for (week, _slot), idx in mapping.items()
             if week == first
         }
-        return self.start <= present
+        return self.start <= present and not (self.hold & present)
 
     def _respects_caps(self, mapping: dict[tuple[int, str], int]) -> bool:
         """Re-check the per-team and per-game limits after a swap."""

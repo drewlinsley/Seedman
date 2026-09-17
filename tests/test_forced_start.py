@@ -104,3 +104,31 @@ def test_forcing_still_respects_the_one_use_rule():
     plan = _solve(start_players={"QB3", "RB3"})
     started = [p["player_id"] for wp in plan.weeks for p in wp.picks]
     assert len(started) == len(set(started))
+
+
+# ----------------------------------------------------------------------
+# the polish must not overrule you
+# ----------------------------------------------------------------------
+def test_the_polish_cannot_reinstate_a_held_player():
+    """The bug this test exists for: it did exactly that, silently.
+
+    The MILP honoured the hold, and then the local search -- which reshuffles
+    players between weeks on its own judgement -- swapped him straight back in.
+    The printed lineup contradicted the "holding..." line three rows above it.
+    """
+    plan = _solve(hold_players={"QB0", "RB0"})
+    week2 = {p["player_id"] for p in _week(plan, 2).picks}
+    assert not ({"QB0", "RB0"} & week2)
+
+
+def test_a_held_player_is_still_used_in_a_later_week():
+    """A hold is one week, not a ban; the polish must not turn it into one."""
+    plan = _solve(hold_players={"QB0"})
+    later = {p["player_id"] for wp in plan.weeks[1:] for p in wp.picks}
+    assert "QB0" in later
+
+
+def test_holds_and_starts_both_survive_together():
+    plan = _solve(hold_players={"QB0"}, start_players={"QB5"})
+    week2 = {p["player_id"] for p in _week(plan, 2).picks}
+    assert "QB5" in week2 and "QB0" not in week2

@@ -527,6 +527,15 @@ only honest way to answer "what does this cost me". Asking for both on the same
 player raises rather than picking a winner: quietly resolving it either way could
 start a player you meant to sit, and you would not find out until kickoff.
 
+Both constraints have to survive the post-solve polish, and for a while one of
+them did not. The MILP honoured every hold; the local search then reshuffled
+players between weeks on its own judgement -- which is the one thing these flags
+exist to overrule -- and swapped held players straight back in. A lineup printed
+`holding week 2 players from BUF, DET` and then started a Buffalo receiver three
+rows below it, alongside a running back that had been explicitly sat. The polish
+now re-checks holds and forced starts on every candidate move, and the swap that
+exposed it is a test.
+
 It bars whole games for the *current week only* — the same player is fine in week
 10 — which is the `--hold` mechanism rather than the permanent `used_players` one.
 In week 2 of 2026 it cost 0.6 points of title probability (23.3% to 22.7%) and,
