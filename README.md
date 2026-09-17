@@ -475,6 +475,30 @@ practice-report listing gives 0.977 against 1.011 for players not listed at all,
 and nothing whatsoever at quarterback (1.014 against 0.998), because most
 listings are a veteran's rest day. Only the season-ending ones carry.
 
+### Soft defences: measured, and deliberately not used
+
+"They are playing the worst pass defence in the league" is the most common
+matchup argument in fantasy, and on this data it is worth nothing. Points allowed
+to each position, rebuilt each week from only the games played before it, blended
+into the projection at four strengths, scored on held-out 2025:
+
+| | model | +25% | +50% | +100% |
+|---|---|---|---|---|
+| QB | **0.6073** | 0.6069 | 0.6055 | 0.6019 |
+| RB | **0.6233** | 0.6229 | 0.6162 | 0.5923 |
+| WR | **0.5757** | 0.5728 | 0.5635 | 0.5356 |
+| TE | **0.5939** | 0.5909 | 0.5843 | 0.5639 |
+
+Monotonically worse at every position and every weight. The implied team total
+already carries defensive quality — a sportsbook prices it better than a
+points-allowed average confounded by whoever happened to be on the schedule — so
+the extra term adds only noise. It is not in the model, and the table is here so
+that nobody adds it again.
+
+This does not mean the splits are fake. In week 2 of 2026 Miami really is the 8th
+softest defence against quarterbacks and Cleveland the 25th. It means knowing
+that does not improve a lineup, once you already know the spread.
+
 ### Thursday costs more than the player
 
 Most sites lock your whole roster at the first kickoff among your starters, so a
@@ -485,6 +509,23 @@ is a real option and `--earliest-kickoff sunday` prices it:
 seedman optimize --earliest-kickoff sunday    # no Thursday or Friday starters
 seedman optimize --earliest-kickoff monday    # Monday-night only, if you like pain
 ```
+
+### Telling the model what it does not know
+
+Two flags for the case where you know something the projections do not — a beat
+writer's report, a coach's press conference, a hunch about a player's knee. Both
+apply to the current week only and leave every later week untouched:
+
+```bash
+seedman optimize --hold "Derrick Henry"        # not this week; still free later
+seedman optimize --start "Trey McBride"        # I want him; tell me the price
+```
+
+Neither argues with you. `--start` reoptimises the whole remaining season around
+the constraint and reports what it did to the title probability, which is the
+only honest way to answer "what does this cost me". Asking for both on the same
+player raises rather than picking a winner: quietly resolving it either way could
+start a player you meant to sit, and you would not find out until kickoff.
 
 It bars whole games for the *current week only* — the same player is fine in week
 10 — which is the `--hold` mechanism rather than the permanent `used_players` one.

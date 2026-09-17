@@ -105,6 +105,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="drop players whose game has kicked off (ISO timestamp, or 'now', or 'off')",
     )
     p_opt.add_argument(
+        "--start",
+        nargs="+",
+        default=None,
+        metavar="PLAYER",
+        help=(
+            "force these players into this week's lineup and reoptimise around "
+            "them. The printed plan then says what the insistence cost."
+        ),
+    )
+    p_opt.add_argument(
         "--earliest-kickoff",
         default=None,
         metavar="TIME",
@@ -267,6 +277,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         max_per_game=args.max_per_game,
         as_of=_parse_as_of(args.as_of),
         hold_players=_resolve_holds(args, config, state.current_week),
+        start_players=_resolve_names(args, config, args.start),
     )
     plan = result.plan
 
@@ -324,6 +335,26 @@ def _resolve_holds(
             )
 
     return holds or None
+
+
+def _resolve_names(
+    args: argparse.Namespace, config: LeagueConfig, names: list[str] | None
+) -> set[str] | None:
+    """Player names to ids, raising on anything unmatched.
+
+    Silence here is expensive in both directions: an unresolved `--hold` starts
+    the player you meant to sit, and an unresolved `--start` quietly ignores the
+    one thing you asked for.
+    """
+    if not names:
+        return None
+    from .league.manual import PlayerResolver, UnresolvedPlayers
+
+    client = NflverseClient(cache_dir=args.cache)
+    resolved, missing = PlayerResolver(client.rosters(config.season)).resolve_all(names)
+    if missing:
+        raise UnresolvedPlayers(missing)
+    return resolved
 
 
 def _teams_kicking_off_before(

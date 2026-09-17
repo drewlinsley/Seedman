@@ -173,6 +173,7 @@ class SurvivorOptimizer:
         field_model: FieldModel,
         used_players: set[str] | None = None,
         hold_players: set[str] | None = None,
+        start_players: set[str] | None = None,
         candidates_per_slot_week: int = DEFAULT_CANDIDATES_PER_SLOT_WEEK,
         use_survival_weights: bool = True,
         max_per_team: int = MAX_PER_TEAM_DEFAULT,
@@ -191,6 +192,20 @@ class SurvivorOptimizer:
         # a player you want to hold on principle -- without lying to it about
         # his availability for the rest of the season.
         self.hold = hold_players or set()
+        # Players you insist on starting THIS week. The mirror of `hold`, and the
+        # honest way to ask "I want him, what does it cost?" -- the plan reoptimises
+        # around the constraint and the objective tells you the price.
+        self.start = start_players or set()
+        conflict = self.hold & self.start
+        if conflict:
+            # Silently picking a winner here could start a player you meant to
+            # sit, or sit one you meant to start, and you would not find out
+            # until the games had kicked off.
+            raise ValueError(
+                "these players are both held and forced to start: "
+                + ", ".join(sorted(conflict))
+                + ". Drop one of the two instructions."
+            )
         self.candidates_per_slot_week = candidates_per_slot_week
         self.use_survival_weights = use_survival_weights
         self.max_per_team = max_per_team
@@ -426,6 +441,8 @@ class SurvivorOptimizer:
                     trial[key_a], trial[key_b] = moved_b, moved_a
                     if not self._respects_caps(trial):
                         continue
+                    if self.start and not self._respects_forced_starts(trial):
+                        continue
 
                     rebuilt = {}
                     for week in (week_a, week_b):
@@ -446,6 +463,18 @@ class SurvivorOptimizer:
         if rounds > 1:
             log.debug("polish improved the objective over %d rounds", rounds - 1)
         return self._finalise(plan)
+
+    def _respects_forced_starts(self, mapping: dict[tuple[int, str], int]) -> bool:
+        """A forced start must survive the polish; it is a constraint, not a hint."""
+        if not self.weeks:
+            return True
+        first = self.weeks[0]
+        present = {
+            str(self.projections.at[idx, "player_id"])
+            for (week, _slot), idx in mapping.items()
+            if week == first
+        }
+        return self.start <= present
 
     def _respects_caps(self, mapping: dict[tuple[int, str], int]) -> bool:
         """Re-check the per-team and per-game limits after a swap."""
@@ -610,6 +639,21 @@ class SurvivorOptimizer:
                 pulp.lpSum(variables[(week, slot_name, idx)] for idx in indices) == 1,
                 f"fill_{week}_{slot_name}",
             )
+
+        # Forced starts: this player occupies one of this week's slots.
+        if self.start and self.weeks:
+            first = self.weeks[0]
+            for player_id in self.start:
+                chosen = [
+                    variables[key]
+                    for key in variables
+                    if key[0] == first and str(frame.at[key[2], "player_id"]) == player_id
+                ]
+                if chosen:
+                    problem += (
+                        pulp.lpSum(chosen) == 1,
+                        f"force_{_sanitise(player_id)}",
+                    )
 
         # Usage cap: the one-start-per-season rule, and the only reason any of
         # this is harder than starting your best player every week.
