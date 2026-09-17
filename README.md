@@ -433,6 +433,48 @@ Two ways to close the gap:
   of work. There is deliberately **no speculative scraper** in this repo — a guessed
   HTML parser that silently returns the wrong roster is worse than no parser.
 
+### The injury report cannot see a torn knee from last December
+
+`report_status` is the column the availability model reads, and nine months after
+surgery a player is blank in it: cleared, practising fully, nothing to see.
+Patrick Mahomes in week 2 of 2026 is exactly that — and he hurt his knee in week
+15 of 2025, never played again through a run to week 22, and is *still* carrying
+a knee line on the practice report. He was priced as a man with nothing wrong
+with him.
+
+Measured over 2021-2024 on players whose season ENDED on an injury and who came
+back the next year, each against his own pre-injury baseline:
+
+| | n | first 6 weeks | weeks 7+ |
+|---|---|---|---|
+| ALL | 55 | **0.834** | 0.815 |
+| QB | 17 | 0.976 | 1.097 |
+| RB | 10 | 0.899 | 0.711 |
+| WR | 23 | 0.721 | 0.700 |
+| TE | 5 | 0.743 | 0.717 |
+| knee | 8 | 0.708 | *(other injuries 0.855)* |
+
+Every bucket is under this repo's 60-observation bar, so none is used raw: each
+is shrunk toward the pooled figure with a prior worth 30 cases, and the knee
+modifier is shrunk toward 1.0 the same way. What survives is the direction,
+which is all 55 cases can honestly carry.
+
+**A first pass at this got 280 players and an effect of 0.897**, by comparing
+each player's last game against the league's last week — which is 22, so every
+player on a team that missed the playoffs looked like he had "missed four games".
+Those healthy players diluted the penalty. Counting against the player's own
+team's last game is what takes the sample to 55 and the effect to 0.834.
+
+Note what the QB row does: 0.976 early, 1.097 after week 6. A returning
+quarterback is not a player to write off, he is a player to **bank**. With this
+live, Mahomes drops from 16.05 to 14.51 in week 2 — QB3 to QB6 — and the season
+plan moves him to week 13, on its own, without being told to.
+
+What this is **not** is a general "an injury is listed" discount. Pooling every
+practice-report listing gives 0.977 against 1.011 for players not listed at all,
+and nothing whatsoever at quarterback (1.014 against 0.998), because most
+listings are a veteran's rest day. Only the season-ending ones carry.
+
 ### Thursday costs more than the player
 
 Most sites lock your whole roster at the first kickoff among your starters, so a

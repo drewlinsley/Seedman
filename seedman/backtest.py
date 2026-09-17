@@ -115,6 +115,7 @@ def replay_projections(
     weekly = client.weekly_stats(season)
     weekly_prior = client.weekly_stats(season - 1)
     injuries = client.injuries(season)
+    injuries_prior = client.injuries(season - 1)
     rosters = client.rosters(season)
 
     truth = actual_points(config, weekly, schedule)
@@ -131,6 +132,7 @@ def replay_projections(
             weekly_prior=weekly_prior,
             schedule=schedule,
             injuries=injuries,
+            injuries_prior=injuries_prior,
             rosters=rosters,
             availability_model=AvailabilityModel(),
             through_week=week - 1,  # the guard that makes this a backtest
@@ -394,6 +396,7 @@ def run_strategies(
     weekly = client.weekly_stats(season)
     weekly_prior = client.weekly_stats(season - 1)
     injuries = client.injuries(season)
+    injuries_prior = client.injuries(season - 1)
     rosters = client.rosters(season)
     truth = actual_points(config, weekly, schedule)
 
@@ -413,6 +416,7 @@ def run_strategies(
             weekly_prior=weekly_prior,
             schedule=schedule,
             injuries=injuries,
+            injuries_prior=injuries_prior,
             rosters=rosters,
             availability_model=AvailabilityModel(),
             through_week=week - 1,
@@ -534,6 +538,7 @@ def rate_model_inputs(
     weekly = client.weekly_stats(season)
     weekly_prior = client.weekly_stats(season - 1)
     injuries = client.injuries(season)
+    injuries_prior = client.injuries(season - 1)
     rosters = client.rosters(season)
     truth = actual_points(config, weekly, schedule)
 
@@ -546,6 +551,7 @@ def rate_model_inputs(
             weekly_prior=weekly_prior,
             schedule=schedule,
             injuries=injuries,
+            injuries_prior=injuries_prior,
             rosters=rosters,
             through_week=week - 1,
         )

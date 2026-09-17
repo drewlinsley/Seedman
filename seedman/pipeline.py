@@ -57,6 +57,7 @@ def build_projections(
     weekly_current = client.weekly_stats(season)
     weekly_prior = client.weekly_stats(season - 1)
     injuries = client.injuries(season)
+    injuries_prior = client.injuries(season - 1)
     rosters = client.rosters(season)
 
     last_week = min(config.survival.final_week, as_of_week + horizon - 1)
@@ -70,6 +71,7 @@ def build_projections(
         weekly_prior=weekly_prior,
         schedule=schedule,
         injuries=injuries,
+        injuries_prior=injuries_prior,
         rosters=rosters,
         availability_model=AvailabilityModel(),
         availability_curves=curves,

@@ -35,7 +35,14 @@ import pandas as pd
 
 from . import fitted
 from .config import LeagueConfig
-from .injury import NOT_ON_REPORT, AvailabilityModel, _clean, latest_injury_report
+from .injury import (
+    NOT_ON_REPORT,
+    AvailabilityModel,
+    _clean,
+    latest_injury_report,
+    players_returning_from_injury,
+    return_multiplier,
+)
 from .scoring import build_dst_stat_lines, score_dst, score_players
 
 # Replacement-level per-game scoring, used when a player has little or no
@@ -108,6 +115,10 @@ class ProjectionModel:
         weekly_prior: pd.DataFrame,
         schedule: pd.DataFrame,
         injuries: pd.DataFrame,
+        # Last season's report, which is what says whether a season ENDED on an
+        # injury. Optional: without it nobody is flagged as returning, which is
+        # the right failure mode -- no penalty rather than a guessed one.
+        injuries_prior: pd.DataFrame | None = None,
         rosters: pd.DataFrame,
         availability_model: AvailabilityModel | None = None,
         availability_curves: pd.DataFrame | None = None,
@@ -150,6 +161,20 @@ class ProjectionModel:
 
         self.current = self._prepare(weekly_current)
         self.prior = self._prepare(weekly_prior)
+
+        # Players whose previous season ended on an injury. The weekly report
+        # will not flag them -- nine months on they are cleared and practising
+        # fully -- but they measurably underperform their own baseline, and at
+        # quarterback they recover inside the season, which makes them exactly
+        # the players to bank for a later week rather than spend now.
+        # The PRIOR season's report is what says why a season ended; this
+        # season's says nothing about it, and passing it found four players in
+        # the whole league and missed the quarterback this was written for.
+        self.returning = (
+            players_returning_from_injury(weekly_prior, injuries_prior)
+            if injuries_prior is not None
+            else {}
+        )
         self.position_mean, self.position_sd = self._fit_position_priors()
         self._league_avg_implied = self._average_implied_total()
 
@@ -399,6 +424,10 @@ class ProjectionModel:
                 else:
                     avail_now = self.availability.play_probability(report_status, practice_status)
                     effectiveness = self.availability.effectiveness_multiplier(report_status)
+                    if rec.player_id in self.returning:
+                        effectiveness *= return_multiplier(
+                            rec.position, week, self.returning[rec.player_id]
+                        )
 
                 avail = self._future_availability(rec.player_id, rec.position, weeks_ahead, avail_now)
 
