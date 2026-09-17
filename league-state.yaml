@@ -1,39 +1,33 @@
 # Rocco Siffredi — my league state. Update this after you set each week's lineup.
 #
-# `used_players` is the load-bearing field: in a one-use-per-player league these
+# `used_players` is the load-bearing field: in a one-start-per-season league these
 # are permanently off the board, and the optimizer will never suggest them again.
 # Names are matched loosely, so "Ja'Marr Chase" and "jamarr chase" both work.
 
 current_week: 2
 
-# Nobody is eliminated in this format; this is just the league size.
+# Head-to-head, nobody is eliminated weekly; this is just the league size.
 teams_remaining: 12
 
-# Week 1: beat Josh Schorr, who put up 82.46.
+# Week 1: 85.00 to Josh Schorr's 82.46. A 2.54-point win.
 record:
   wins: 1
   losses: 0
 
-# Week 1 — the lineup recommended and confirmed ("Ok I like that lineup").
-# ASSUMED, AND PROBABLY WRONG. These six scored 68.30, and the week-1 opponent
-# scored 82.46 in a head-to-head league that we won. You cannot win with 68.30
-# against 82.46, so whatever was actually entered is not this. Replace the list
-# below with the real six — in a one-start-per-season league a wrong ledger
-# silently poisons every week from here to the playoffs.
+# Week 1 — CONFIRMED from the league site's own lineup card, not inferred.
 used_players:
-  - Dak Prescott       # QB  DAL  14.40
-  - Cam Skattebo       # RB  NYG  14.10
-  - Rashee Rice        # WR  KC    8.90
-  - Quentin Johnston   # WR  LAC   2.70
-  - Dallas Goedert     # TE  PHI  21.70
-  - Jameson Williams   # FLEX DET  6.50
-  #                       week 1 total: 68.30
+  - Dak Prescott       # QB    DAL  14.40
+  - Cam Skattebo       # RB    NYG  14.10
+  - Rashee Rice        # WR1   KC    8.90
+  - Quentin Johnston   # WR2   LAC   2.70
+  - Dallas Goedert     # TE    PHI  21.70
+  - Chris Olave        # FLEX  NO   23.20  <- the swap that won the week
+  #                            total: 85.00
 
-# Any NFL player is pickable each week (survivor rule, no draft).
+# Any NFL player is pickable each week (no draft).
 available_players: []
 
-# Real opponent totals, which beat the modelled cut line. One card seen so far:
-# Josh Schorr, week 1. Reconciling it to the cent is what proved the league runs
-# half PPR with NO yardage bonuses.
+# Real opponent totals beat any modelled bar. Reconciling the week-1 card to the
+# cent is what proved the league runs half PPR with NO yardage bonuses.
 observed_field_scores:
   - 82.46   # week 1, Josh Schorr (Burrow / Achane / Lamb / Olave / LaPorta / C.Brown)

@@ -104,6 +104,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default="now",
         help="drop players whose game has kicked off (ISO timestamp, or 'now', or 'off')",
     )
+    p_opt.add_argument(
+        "--earliest-kickoff",
+        default=None,
+        metavar="TIME",
+        help=(
+            "bar players whose game starts before TIME, this week only "
+            "(e.g. 'sunday' to skip Thursday night, or an ISO timestamp). "
+            "Starting a player locks the roster at his kickoff, so a Thursday "
+            "starter costs three days of injury news on the other five."
+        ),
+    )
     p_opt.set_defaults(handler=cmd_optimize)
 
     p_cal = sub.add_parser("calibrate", help="fit model constants from historical seasons")
@@ -255,7 +266,7 @@ def cmd_optimize(args: argparse.Namespace) -> int:
         max_per_team=args.max_per_team,
         max_per_game=args.max_per_game,
         as_of=_parse_as_of(args.as_of),
-        hold_players=_resolve_holds(args, config),
+        hold_players=_resolve_holds(args, config, state.current_week),
     )
     plan = result.plan
 
@@ -278,20 +289,75 @@ def cmd_optimize(args: argparse.Namespace) -> int:
     return 0
 
 
-def _resolve_holds(args: argparse.Namespace, config: LeagueConfig) -> set[str] | None:
-    """Turn `--hold` names into player ids, failing loudly on a typo.
+def _resolve_holds(
+    args: argparse.Namespace, config: LeagueConfig, week: int | None = None
+) -> set[str] | None:
+    """Everyone barred from *this week only*, still free in every later one.
 
-    A silently-unresolved name would start the very player you meant to sit.
+    Two sources: names you passed to `--hold`, and whole games ruled out by
+    `--earliest-kickoff`. A silently-unresolved name would start the very player
+    you meant to sit, so a typo raises rather than being dropped.
     """
-    if not args.hold:
-        return None
-    from .league.manual import PlayerResolver, UnresolvedPlayers
-
     client = NflverseClient(cache_dir=args.cache)
-    resolved, missing = PlayerResolver(client.rosters(config.season)).resolve_all(args.hold)
-    if missing:
-        raise UnresolvedPlayers(missing)
-    return resolved
+    holds: set[str] = set()
+
+    if args.hold:
+        from .league.manual import PlayerResolver, UnresolvedPlayers
+
+        resolved, missing = PlayerResolver(client.rosters(config.season)).resolve_all(
+            args.hold
+        )
+        if missing:
+            raise UnresolvedPlayers(missing)
+        holds |= resolved
+
+    cutoff = getattr(args, "earliest_kickoff", None)
+    if cutoff and week is not None:
+        early = _teams_kicking_off_before(client, config.season, week, cutoff)
+        if early:
+            roster = client.rosters(config.season)
+            barred = roster[roster["team"].isin(early)]["gsis_id"].dropna()
+            holds |= set(barred.astype(str))
+            print(
+                f"  holding week {week} players from {', '.join(sorted(early))} "
+                f"(game starts before {cutoff})\n"
+            )
+
+    return holds or None
+
+
+def _teams_kicking_off_before(
+    client: NflverseClient, season: int, week: int, cutoff: str
+) -> set[str]:
+    """Teams whose week-`week` game starts before `cutoff`.
+
+    `cutoff` is an ISO timestamp, or a weekday name, which resolves to midnight
+    at the start of that day in the week being planned -- so 'sunday' means
+    "nothing that kicks off Thursday, Friday or Saturday".
+    """
+    games = client.schedule()
+    games = games[(games["season"] == season) & (games["week"] == week)]
+    if games.empty:
+        return set()
+
+    kickoff = pd.to_datetime(
+        games["gameday"].astype(str)
+        + " "
+        + games["gametime"].fillna("13:00").astype(str),
+        errors="coerce",
+    )
+    text = str(cutoff).strip().lower()
+    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    if text in weekdays:
+        same_day = games["weekday"].astype(str).str.lower() == text
+        if not same_day.any():
+            return set()
+        moment = kickoff[same_day].min().normalize()
+    else:
+        moment = pd.Timestamp(cutoff)
+
+    early = games[kickoff.notna() & (kickoff < moment)]
+    return set(early["home_team"]) | set(early["away_team"])
 
 
 def _parse_as_of(value: str):

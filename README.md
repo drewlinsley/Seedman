@@ -433,6 +433,25 @@ Two ways to close the gap:
   of work. There is deliberately **no speculative scraper** in this repo — a guessed
   HTML parser that silently returns the wrong roster is worse than no parser.
 
+### Thursday costs more than the player
+
+Most sites lock your whole roster at the first kickoff among your starters, so a
+Thursday-night player forfeits three days of injury news on the other five. That
+is a real option and `--earliest-kickoff sunday` prices it:
+
+```bash
+seedman optimize --earliest-kickoff sunday    # no Thursday or Friday starters
+seedman optimize --earliest-kickoff monday    # Monday-night only, if you like pain
+```
+
+It bars whole games for the *current week only* — the same player is fine in week
+10 — which is the `--hold` mechanism rather than the permanent `used_players` one.
+In week 2 of 2026 it cost 0.6 points of title probability (23.3% to 22.7%) and,
+counter-intuitively, made that week's lineup *stronger*: forcing Khalil Shakir out
+pulled Derrick Henry forward from week 4, taking the week from a 44.4% underdog to
+a 51.2% favourite. Constraining one week can improve it; what it cannot do is
+improve the season, and the season is what dropped.
+
 The single highest-value thing you can add is `observed_field_scores` in
 `league-state.yaml`: what the other teams actually scored each week. That replaces
 the modelled cut line with the real one, and the cut line drives everything.
