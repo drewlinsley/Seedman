@@ -4,26 +4,50 @@ Record 1-0. Lineup locks **Sunday 20 September, 1:00 PM ET**.
 
 ## Start this
 
-| slot | player | team | opponent | proj | status |
-|---|---|---|---|---|---|
-| QB | **Caleb Williams** | CHI | vs MIN | 20.27 | not listed |
-| RB | **Kenneth Walker III** | KC | vs IND | 12.67 | not listed |
-| WR1 | **Deebo Samuel Sr.** | SF | vs MIA | 10.73 | not listed |
-| WR2 | **Davante Adams** | LA | vs NYG (Mon) | 9.99 | cleared |
-| TE | **Tucker Kraft** | GB | @ NYJ | 5.60 | not listed |
-| FLEX | **Aaron Jones** | MIN | @ CHI | 7.34 | not listed |
+| slot | player | team | opponent | kickoff | proj | status |
+|---|---|---|---|---|---|---|
+| QB | **Brock Purdy** | SF | vs MIA | Sun 4:25 | 15.15 | not listed |
+| RB | **Kenneth Walker III** | KC | vs IND | Sun 8:20 | 12.67 | not listed |
+| WR1 | **George Pickens** | DAL | vs WAS | Sun 4:25 | 10.08 | not listed |
+| WR2 | **Davante Adams** | LA | vs NYG | Mon 8:15 | 9.99 | cleared |
+| TE | **Tucker Kraft** | GB | @ NYJ | Sun 1:00 | 5.60 | not listed |
+| FLEX | **Aaron Jones** | MIN | @ CHI | Sun 1:00 | 7.34 | not listed |
 
-**66.6 projected ± 19.2 · opponent ~61.2 · 57.8% to win**
-P(make the playoffs) 66.1% · P(win it all) 28.6%
+**60.8 projected ± 17.8 · opponent ~61.2 · 49.4% to win**
+P(make the playoffs) 64.5% · P(win it all) 28.8%
 
-All six audited against the roster file: every one `ACT/A01`.
+All six audited against the roster file: every one `ACT/A01`. Six different NFL
+teams, so the one-per-team cap holds without a config change.
 
 ```bash
 seedman optimize --max-per-team 1 --max-per-game 2 --earliest-kickoff sunday \
   --hold "Derrick Henry" "Ryan Flournoy" --avoid-opponent CIN \
-  --start "Tucker Kraft" "Caleb Williams" "Davante Adams" \
-          "Aaron Jones" "Kenneth Walker III"
+  --start "Brock Purdy" "George Pickens" "Kenneth Walker III" \
+          "Aaron Jones" "Davante Adams" "Tucker Kraft"
 ```
+
+### The quarterback decision, priced four ways
+
+| lineup | proj | win | P(title) | cap change? |
+|---|---|---|---|---|
+| Caleb Williams (solver's pick) | 66.6 | **57.8%** | 28.6% | no |
+| Purdy + Deebo stacked | 61.5 | 50.4% | **29.2%** | yes (`--max-per-team 2`) |
+| **Purdy + Pickens (chosen)** | 60.8 | 49.4% | 28.8% | no |
+| Purdy + Luther Burden | 59.2 | 47.0% | 28.9% | no |
+
+Purdy costs about 8 points of week-2 win probability against Caleb, and only half
+of that is the quarterback. The rest is collateral: **Deebo Samuel is also a
+49er**, so the one-per-team cap ejects him the moment Purdy goes in. Pickens
+recovers most of it without touching the cap; stacking Purdy with Deebo recovers
+slightly more and widens the spread to ±19.4, which is the correlation doing its
+job — the two rise and fall on the same throws.
+
+The finding worth keeping: **P(title) moves barely at all across all four**
+(28.6% to 29.2%). This decision is close to free in season terms and expensive
+in weekly ones. Caleb banking to week 17 is where the small title gain comes
+from — a quarterback is worth far more in a playoff week.
+
+At 49.4% this lineup is a coin flip. It is no longer favoured in week 2.
 
 ### Kenneth Walker over McCaffrey, and over Bucky Irving
 
@@ -69,7 +93,7 @@ total already carries defensive quality and a sportsbook prices it better. See
 DVOA itself is proprietary to Football Outsiders/FTN and is not in this data.
 Nothing here is a DVOA figure.
 
-### No better quarterback matchup exists this week
+### On whether a better quarterback matchup existed
 
 | QB | proj | implied total |
 |---|---|---|
