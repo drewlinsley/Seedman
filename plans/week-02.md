@@ -1,55 +1,100 @@
-# Week 2 — set before Sunday 1:00 PM ET
+# Week 2 — Rocco Siffredi, 2026
 
-Regenerate any of this with:
+Record 1-0. Lineup locks **Sunday 20 September, 1:00 PM ET**.
+
+## Start this
+
+| slot | player | team | opponent | proj | status |
+|---|---|---|---|---|---|
+| QB | **Caleb Williams** | CHI | vs MIN | 20.27 | not listed |
+| RB | **Christian McCaffrey** | SF | vs MIA | 12.96 | cleared |
+| WR1 | **Ryan Flournoy** | DAL | vs WAS | 8.25 | not listed |
+| WR2 | **Chris Godwin Jr.** | TB | vs CLE | 8.31 | not listed |
+| TE | **Tucker Kraft** | GB | @ NYJ | 5.60 | not listed |
+| FLEX | **Davante Adams** | LA | vs NYG | 9.99 | cleared |
+
+**65.4 projected ± 18.3 · opponent ~61.2 · 56.2% to win**
+P(make the playoffs) 66.6% · P(win it all) 28.8%
+
+Regenerate with:
 
 ```bash
 seedman optimize --max-per-team 1 --max-per-game 2 \
-  --earliest-kickoff sunday --hold "Derrick Henry" --start "Tucker Kraft"
+  --earliest-kickoff sunday --hold "Derrick Henry" --avoid-opponent CIN \
+  --start "Christian McCaffrey" "Tucker Kraft" "Caleb Williams"
 ```
 
-Those flags are decisions, not defaults, and each is priced:
+## What changed since the last version of this file
 
-| flag | why | cost |
-|---|---|---|
-| `--max-per-team 1 --max-per-game 2` | six separate games; a stacked lineup's variance is real | ~0 (EV went *up*) |
-| `--earliest-kickoff sunday` | a Thursday starter locks the whole roster three days early | 0.6 pts of title probability |
-| `--hold "Derrick Henry"` | banked, by choice | ~0 |
-| `--start "Tucker Kraft"` | better than Kelce on both axes | free (+0.6 EV, title unchanged) |
+The previous recommendation started **A.J. Brown, who is on injured reserve**
+and was going to score zero. He has been on reserve since the roster cutdowns.
 
-## Recommended
+The model could not see him. A player on IR drops off the weekly injury report
+entirely — with no practice to participate in there is nothing to report — so
+the availability model read him as "not on report", which is the *healthiest*
+state it knows, and priced him as a starter. Only 2 of the 278 players on
+reserve appear on this week's report at all. Nothing downstream could have
+caught it.
 
-| slot | player | team | kickoff |
+96 skill players were in a non-playable status this week and every one of them
+was priced as healthy: Josh Jacobs (exempt list), Isiah Pacheco, James Conner,
+Tank Dell, Jordan Mason. The model now reads the roster status column, which it
+was never reading, and the printed `status` column names the reason.
+
+**The fix did not cost points — it revealed points we never had.** The old
+lineup's 67.7 projection included a certain zero. The honest number for that
+same lineup was never above the low 60s.
+
+## Each decision, priced
+
+Every one of these was run as its own 16-week plan.
+
+| decision | week 2 | win | P(title) |
 |---|---|---|---|
-| QB | **Caleb Williams** | CHI vs MIN | Sun 1:00 |
-| RB | David Montgomery | HOU vs CIN | Sun 1:00 |
-| WR1 | Davante Adams | LA vs NYG | Mon 8:15 |
-| WR2 | A.J. Brown | NE vs PIT | Sun 1:00 |
-| TE | Tucker Kraft | GB @ NYJ | Sun 1:00 |
-| FLEX | Christian McCaffrey | SF vs MIA | Sun 4:25 |
+| balanced plan (Lamar at QB) | 61.1 | 49.8% | 29.3% |
+| **+ Caleb Williams at QB** | **65.4** | **56.2%** | **28.8%** |
+| spend everything now (`--no-survival`) | 72.1 | 65.2% | **6.2%** |
 
-67.7 projected, 59.5% to win. P(playoffs) 66.7%, P(title) 29.0%.
+- **Avoiding CIN costs nothing.** Ran with and without `--avoid-opponent CIN`:
+  the lineup is byte-identical. No CIN-facing player was in the optimum anyway.
+- **Forcing McCaffrey costs nothing.** The solver already wanted him.
+- **Holding Derrick Henry costs nothing this week.** He is pencilled for week 3.
+- **Caleb over Lamar buys +6.4pp of week-2 win probability for −0.5pp of title.**
+  Take it. The model does not know that **Zay Flowers is Doubtful (hamstring,
+  limited practice)** — Lamar's WR1, and a hit no QB projection can see, because
+  a projection knows nothing about who else is in the huddle. Lamar banks to
+  week 8 instead; Mahomes still takes week 17, past his recovery window.
+- **Spending everything now is still catastrophic**: 6.2% title odds, below the
+  8.3% a twelve-team coin flip would give you. That has held across every
+  assumption tested.
 
-**The QB call is a judgement, not an output.** Keeping Lamar Jackson scores 61.4 /
-50.3% / 29.5% — half a point *more* title probability. Caleb is the pick anyway for
-two reasons the model does not price:
+## Why 56% and not more
 
-1. Zay Flowers, Lamar's WR1, is **Doubtful** (hamstring). The projection has no
-   idea that a quarterback's best receiver is out.
-2. A berth needs 8 wins and the plan projects 8.2. A banked win now is worth more
-   than the model's flat treatment of regular-season weeks implies.
-
-Taking Caleb moves the week-17 QB to Patrick Mahomes, who by then is past the
-return-from-injury recovery window (0.976 early, 1.097 after week 6). That is most
-of why the cost is only half a point.
+This is a genuinely thin week. Brown and the CIN-facing players are out of the
+pool, BUF and DET already played Thursday, and the solver is banking the rest
+for the bracket. Flournoy at WR1 is a WR3 — but a real one: 71% of Dallas
+snaps in week 1 behind Pickens and Lamb. Not a data artifact; I checked.
 
 ## After the games
 
-Add the six actually started to `used_players` in `league-state.yaml`, update
-`record:`, and append the opponent's total to `observed_field_scores` — real scores
-replace the modelled bar, and the bar drives everything.
+1. Add the six you actually started to `used_players` in `league-state.yaml`.
+2. Update `record:`.
+3. Append your opponent's total to `observed_field_scores:` — real scores
+   replace the modelled bar, and the bar drives everything.
 
 ## Still unverified
 
-- 12 teams / 6 playoff berths — sets the bar at 8 wins against 8.2 projected. If
-  it is really 4 berths or 14 teams the whole allocation shifts.
-- TE eligibility in the FLEX (RB and WR both confirmed from lineup cards).
+- **12 teams / 6 playoff berths.** Sets the bar at 8 wins against 8.3 projected.
+  This is the assumption that most moves how much banking a stud is worth.
+- **TE eligibility in the FLEX.** RB and WR are both confirmed from lineup cards.
+- **The playoff opponent's strength**, modelled with a 0.17 between-team
+  variance share that is an estimate, not a fit.
+
+## Known soft spot in the fix
+
+The gate holds a gated player out for the whole horizon, because nothing in this
+data dates a return. That is deliberate and slightly conservative: a player who
+does come back flips to `ACT` on the next roster refresh and re-enters the pool
+at full value that day. Since only week one of the plan is ever acted on, the
+cost is a shape, not a commitment — but it means James Conner and Tank Dell are
+absent from the pencilled weeks rather than banked for a return.
