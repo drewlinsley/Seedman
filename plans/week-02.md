@@ -7,25 +7,86 @@ Record 1-0. Lineup locks **Sunday 20 September, 1:00 PM ET**.
 | slot | player | team | opponent | proj | status |
 |---|---|---|---|---|---|
 | QB | **Caleb Williams** | CHI | vs MIN | 20.27 | not listed |
-| RB | **Aaron Jones** | MIN | @ CHI | 7.34 | not listed |
-| WR1 | **Davante Adams** | LA | vs NYG (Mon) | 9.99 | cleared |
-| WR2 | **George Pickens** | DAL | vs WAS | 10.08 | not listed |
+| RB | **Kenneth Walker III** | KC | vs IND | 12.67 | not listed |
+| WR1 | **Deebo Samuel Sr.** | SF | vs MIA | 10.73 | not listed |
+| WR2 | **Davante Adams** | LA | vs NYG (Mon) | 9.99 | cleared |
 | TE | **Tucker Kraft** | GB | @ NYJ | 5.60 | not listed |
-| FLEX | **Christian McCaffrey** | SF | vs MIA | 12.96 | cleared |
+| FLEX | **Aaron Jones** | MIN | @ CHI | 7.34 | not listed |
 
-**66.2 projected ± 18.8 · opponent ~61.2 · 57.4% to win**
-P(make the playoffs) 66.3% · P(win it all) 28.6%
+**66.6 projected ± 19.2 · opponent ~61.2 · 57.8% to win**
+P(make the playoffs) 66.1% · P(win it all) 28.6%
 
-Regenerate with:
+All six audited against the roster file: every one `ACT/A01`.
 
 ```bash
 seedman optimize --max-per-team 1 --max-per-game 2 --earliest-kickoff sunday \
   --hold "Derrick Henry" "Ryan Flournoy" --avoid-opponent CIN \
-  --start "Christian McCaffrey" "Tucker Kraft" "Caleb Williams" \
-          "Davante Adams" "Aaron Jones"
+  --start "Tucker Kraft" "Caleb Williams" "Davante Adams" \
+          "Aaron Jones" "Kenneth Walker III"
 ```
 
-### Two of these are Drew's calls, and both beat the solver
+### Kenneth Walker over McCaffrey, and over Bucky Irving
+
+| lineup | proj | win | P(title) |
+|---|---|---|---|
+| **Walker (Deebo fills WR1)** | **66.6** | **57.8%** | 28.6% |
+| Walker, Pickens forced at WR1 | 65.9 | 56.9% | 28.6% |
+| McCaffrey | 66.2 | 57.4% | 28.6% |
+| Bucky Irving | 64.0 | 54.1% | 28.5% |
+
+Walker for McCaffrey is close to a wash *in isolation*. It pays because
+dropping McCaffrey frees the San Francisco slot under the one-per-team cap and
+**Deebo Samuel** comes in over Pickens. McCaffrey banks to week 4.
+
+Irving is 3.7pp worse and the reason is his usage, not his opponent:
+
+| | week 1 | snap share | implied total |
+|---|---|---|---|
+| Walker | 23 car, 173 yds, **2 TD**, 3 rec | 68%, next back 36% | KC 26.25 |
+| Irving | 8 car, 45 yds, 7 rec, 1 TD | 61%, **Gainwell 46%** | TB 25.00 |
+| McCaffrey | 10 car, 68 yds, 5 rec | 55%, **Black 43%** | SF 29.00 |
+
+Irving is a receiving back in a committee. Walker is a workhorse. McCaffrey,
+notably, is now in a 55/43 split of his own.
+
+### The matchup agrees, which is not evidence
+
+Cleveland against Tampa's backs, Indianapolis against Kansas City's:
+
+| defence | half-PPR allowed to RBs, wk 1 | rank |
+|---|---|---|
+| IND (Walker's opponent) | 38.1 | 30th of 32 |
+| CLE (Irving's opponent) | 15.3 | 12th of 32 |
+
+This points the same way as the answer above, and it should be given no weight
+for two reasons. It is **one game** — Indianapolis played one backfield. And
+points-allowed-by-position, blended into the projection at four strengths and
+scored on held-out 2025, made the model **monotonically worse at every position
+and every weight** (RB: 0.6233 → 0.6229 → 0.6162 → 0.5923). The implied team
+total already carries defensive quality and a sportsbook prices it better. See
+"Soft defences: measured, and deliberately not used" in the README.
+
+DVOA itself is proprietary to Football Outsiders/FTN and is not in this data.
+Nothing here is a DVOA figure.
+
+### No better quarterback matchup exists this week
+
+| QB | proj | implied total |
+|---|---|---|
+| **Caleb Williams** CHI vs MIN | **20.27** | 26.00 |
+| Brock Purdy SF vs MIA | 15.15 | 29.00 |
+| Lamar Jackson BAL vs NO | 14.83 | 27.50 |
+| Patrick Mahomes KC vs IND | 13.61 | 26.25 |
+
+Caleb leads by 5.1 points. The caveat worth keeping in view: that rests on a
+week 1 of 269 passing yards, two passing touchdowns and **two rushing
+touchdowns**. Four touchdowns is not a repeatable line and in week 2 the model
+has almost nothing else to weigh against it, so 20.27 is the softest number on
+this card. He is still the start — a rushing quarterback keeps his floor even
+when the touchdowns regress — and Purdy, who has the better game environment,
+conflicts with Deebo under the one-per-team cap anyway.
+
+### Drew's other two calls, both of which beat the solver
 
 **Aaron Jones at FLEX.** The model prices him at 7.34 off a week 1 in which he
 split Minnesota's backfield almost evenly with Jordan Mason — 46% of snaps to
