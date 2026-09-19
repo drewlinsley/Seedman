@@ -397,6 +397,61 @@ describes infinitesimal transfers, and lineups do not come in infinitesimals.
 ## Read this before you trust a lineup
 
 
+**The injury report cannot see a man on injured reserve.** This one shipped a
+bad lineup before it was caught, so it is worth stating plainly.
+
+A player on IR drops off the weekly injury report entirely. There is no practice
+for him to participate in, so there is nothing to report. The availability model
+read that absence as "not on report" — which, counterintuitively, is one of the
+*healthiest* states it knows (0.92) — and priced a man on IR as a startable
+player. A.J. Brown went into a recommended week 2 lineup on that basis. He had
+been on reserve since the August cutdowns.
+
+It was never one player. 96 skill players were in a non-playable status that
+week and every one of them was priced as healthy. Only **2 of the 278 players on
+reserve appeared on that week's injury report at all**, so no amount of reading
+the report harder would have found them. The answer was sitting in a roster
+column nothing was reading.
+
+Measured against the season's own week 1 box scores — did a player carrying this
+status actually appear in a game?
+
+| roster status | P(appeared) | n |
+|---|---|---|
+| `ACT` active | 0.695 | 502 |
+| `DEV` practice squad | 0.043 | 187 |
+| `RES` reserve (IR / PUP / NFI) | 0.052 | 77 |
+| `INA` `EXE` `RET` `CUT` | 0.000 | 19 |
+
+`ACT`'s 0.695 is deliberately **not** used as an availability number. It is
+third-string quarterbacks who dressed and never took a snap, which is a usage
+question the rate model already answers. Gating on it would double-count.
+
+The gate holds for the whole planning horizon rather than expiring into a
+modelled return. Nothing in this data dates a return: the roster file is a live
+snapshot with no designation date on it, so a season-ending IR is
+indistinguishable from a four-game one. The abbreviation looked like it might
+separate them — `R01` against `R48`, "designated for return" — and on this
+season's box scores it does not (0.065 on n=62 against 0.000 on n=17, which is
+one man placed on reserve *after* playing in week 1, not a signal). An earlier
+four-week window reverted Brown to 75% availability and pencilled him into week
+7, which is the same failure wearing a later date.
+
+Nothing is permanently lost by the conservative reading, and this is why: the
+plan is rebuilt every week, and a player who does come back flips to `ACT` on
+the next roster refresh and re-enters the pool at full value that day. Only week
+one of the plan is ever acted on. The later weeks are a shape, not a commitment.
+
+**Historical seasons cannot check any of this.** Their roster files carry one
+row per player holding the status he *ended* the season on, not a week-by-week
+panel, so the only honest sample is the live one above. A first attempt to
+measure it across 2021-2025 produced `ACT` at 0.44 and every other status at
+exactly zero — a join against a snapshot that reads like a result.
+
+**What the fix cost: nothing, because those points were never there.** The
+lineup it replaced projected 67.7 with a certain zero inside it.
+
+
 
 **The league site is not wired up.** `https://rocco-siffredi.onrender.com` is
 blocked by the network egress policy of the environment this was written in, so
@@ -519,9 +574,19 @@ apply to the current week only and leave every later week untouched:
 ```bash
 seedman optimize --hold "Derrick Henry"        # not this week; still free later
 seedman optimize --start "Trey McBride"        # I want him; tell me the price
+seedman optimize --avoid-opponent CIN          # sit whoever draws that front
 ```
 
-Neither argues with you. `--start` reoptimises the whole remaining season around
+`--avoid-opponent` is the same idea aimed at a defence rather than a player. A
+matchup read the model does not have — a front that looks harder than the
+season-long numbers say — is still a real read, and this is how you spend it for
+one week without writing the player off for the season. Naming a team that is on
+a bye, or misspelling one, raises: barring nobody would silently hand back the
+very lineup you were trying to change. In week 2 of 2026 avoiding Cincinnati
+cost exactly nothing — the lineup came back byte-identical, because no player
+facing them was in the optimum anyway. That is worth knowing too.
+
+None of them argue with you. `--start` reoptimises the whole remaining season around
 the constraint and reports what it did to the title probability, which is the
 only honest way to answer "what does this cost me". Asking for both on the same
 player raises rather than picking a winner: quietly resolving it either way could
