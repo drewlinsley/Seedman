@@ -7,22 +7,53 @@ Record 1-0. Lineup locks **Sunday 20 September, 1:00 PM ET**.
 | slot | player | team | opponent | proj | status |
 |---|---|---|---|---|---|
 | QB | **Caleb Williams** | CHI | vs MIN | 20.27 | not listed |
-| RB | **Christian McCaffrey** | SF | vs MIA | 12.96 | cleared |
-| WR1 | **Ryan Flournoy** | DAL | vs WAS | 8.25 | not listed |
-| WR2 | **Chris Godwin Jr.** | TB | vs CLE | 8.31 | not listed |
+| RB | **Aaron Jones** | MIN | @ CHI | 7.34 | not listed |
+| WR1 | **Davante Adams** | LA | vs NYG (Mon) | 9.99 | cleared |
+| WR2 | **George Pickens** | DAL | vs WAS | 10.08 | not listed |
 | TE | **Tucker Kraft** | GB | @ NYJ | 5.60 | not listed |
-| FLEX | **Davante Adams** | LA | vs NYG | 9.99 | cleared |
+| FLEX | **Christian McCaffrey** | SF | vs MIA | 12.96 | cleared |
 
-**65.4 projected ± 18.3 · opponent ~61.2 · 56.2% to win**
-P(make the playoffs) 66.6% · P(win it all) 28.8%
+**66.2 projected ± 18.8 · opponent ~61.2 · 57.4% to win**
+P(make the playoffs) 66.3% · P(win it all) 28.6%
 
 Regenerate with:
 
 ```bash
-seedman optimize --max-per-team 1 --max-per-game 2 \
-  --earliest-kickoff sunday --hold "Derrick Henry" --avoid-opponent CIN \
-  --start "Christian McCaffrey" "Tucker Kraft" "Caleb Williams"
+seedman optimize --max-per-team 1 --max-per-game 2 --earliest-kickoff sunday \
+  --hold "Derrick Henry" "Ryan Flournoy" --avoid-opponent CIN \
+  --start "Christian McCaffrey" "Tucker Kraft" "Caleb Williams" \
+          "Davante Adams" "Aaron Jones"
 ```
+
+### Two of these are Drew's calls, and both beat the solver
+
+**Aaron Jones at FLEX.** The model prices him at 7.34 off a week 1 in which he
+split Minnesota's backfield almost evenly with Jordan Mason — 46% of snaps to
+45%, 12 carries to 15. **Mason is now on injured reserve.** Behind Jones the
+depth chart is DeeJay Dallas (9% of snaps), a rookie, and a practice-squad back.
+Mason's week 1 line was 15 carries, 59 yards and a touchdown, roughly 11 half-PPR
+points, and most of it is now Jones's. The projection cannot know that: it is
+built from a rate, and the rate is from the split. This is the same class of
+edge as the Zay Flowers one — a change in who else is on the field, which no
+individual projection can represent.
+
+**Flournoy out.** Ryan Flournoy is the Cowboys' WR3: 71% of week 1 snaps behind
+Pickens and Lamb, 4 targets for 22 yards. He is a volume artifact — the model
+likes him because Dallas throws and he is on the field. Barring him made the
+solver spend **George Pickens** (84% of snaps, the actual WR1) whom it had been
+banking for week 12. That swap alone is worth more than it costs.
+
+| lineup | proj | win | P(title) |
+|---|---|---|---|
+| solver's own pick (Flournoy + Godwin) | 65.4 | 56.2% | 28.8% |
+| solver's free pick, Flournoy barred | 65.2 | 56.0% | 28.7% |
+| **the above** | **66.2** | **57.4%** | **28.6%** |
+
+Caleb and Jones are in the same game on opposite offenses, which the model treats
+as *mildly positive* — a shootout lifts both sides. That is the standard,
+well-replicated shape rather than a fit, and for a quarterback against an
+opposing back specifically the game-script logic is murkier than it is for a
+receiver. It moves the spread, not the pick.
 
 ## What changed since the last version of this file
 
@@ -68,12 +99,12 @@ Every one of these was run as its own 16-week plan.
   8.3% a twelve-team coin flip would give you. That has held across every
   assumption tested.
 
-## Why 56% and not more
+## Why 57% and not more
 
-This is a genuinely thin week. Brown and the CIN-facing players are out of the
-pool, BUF and DET already played Thursday, and the solver is banking the rest
-for the bracket. Flournoy at WR1 is a WR3 — but a real one: 71% of Dallas
-snaps in week 1 behind Pickens and Lamb. Not a data artifact; I checked.
+This is a genuinely thin week. A.J. Brown and the CIN-facing players are out of
+the pool, BUF and DET already played Thursday, and the solver is banking the rest
+for the bracket. Kraft at 5.60 is the best tight end it will part with; the ones
+it likes are held for weeks 12 through 17.
 
 ## After the games
 
