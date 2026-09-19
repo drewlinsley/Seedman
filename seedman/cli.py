@@ -115,6 +115,17 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_opt.add_argument(
+        "--avoid-opponent",
+        nargs="+",
+        metavar="TEAM",
+        help=(
+            "bar players facing these teams this week only; they stay free for "
+            "later weeks (e.g. 'CIN' to sit everyone drawing that front). A "
+            "matchup read the model does not have is still a real one -- this "
+            "is how you spend it without writing the player off for the season."
+        ),
+    )
+    p_opt.add_argument(
         "--earliest-kickoff",
         default=None,
         metavar="TIME",
@@ -322,6 +333,18 @@ def _resolve_holds(
             raise UnresolvedPlayers(missing)
         holds |= resolved
 
+    avoid = getattr(args, "avoid_opponent", None)
+    if avoid and week is not None:
+        facing = _teams_facing(client, config.season, week, avoid)
+        if facing:
+            roster = client.rosters(config.season)
+            barred = roster[roster["team"].isin(facing)]["gsis_id"].dropna()
+            holds |= set(barred.astype(str))
+            print(
+                f"  holding week {week} players from {', '.join(sorted(facing))} "
+                f"(facing {', '.join(sorted(t.upper() for t in avoid))})\n"
+            )
+
     cutoff = getattr(args, "earliest_kickoff", None)
     if cutoff and week is not None:
         early = _teams_kicking_off_before(client, config.season, week, cutoff)
@@ -355,6 +378,38 @@ def _resolve_names(
     if missing:
         raise UnresolvedPlayers(missing)
     return resolved
+
+
+def _teams_facing(
+    client: NflverseClient, season: int, week: int, opponents: list[str]
+) -> set[str]:
+    """Teams whose week-`week` opponent is one of `opponents`.
+
+    A named opponent that is on a bye, or simply misspelled, would silently bar
+    nobody and hand back the lineup you were trying to change, so it raises.
+    """
+    wanted = {str(t).strip().upper() for t in opponents if str(t).strip()}
+    games = client.schedule()
+    games = games[(games["season"] == season) & (games["week"] == week)]
+
+    facing: set[str] = set()
+    seen: set[str] = set()
+    for home, away in zip(games["home_team"], games["away_team"]):
+        home, away = str(home).upper(), str(away).upper()
+        seen |= {home, away}
+        if home in wanted:
+            facing.add(away)
+        if away in wanted:
+            facing.add(home)
+
+    unknown = wanted - seen
+    if unknown:
+        raise SystemExit(
+            f"--avoid-opponent: {', '.join(sorted(unknown))} "
+            f"{'has' if len(unknown) == 1 else 'have'} no week {week} game "
+            "(bye week, or a misspelled team code)"
+        )
+    return facing
 
 
 def _teams_kicking_off_before(

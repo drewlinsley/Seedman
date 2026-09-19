@@ -223,6 +223,119 @@ def latest_injury_report(injuries: pd.DataFrame, season: int, week: int) -> pd.D
 
 
 # ----------------------------------------------------------------------
+# Roster status: the gate the injury report cannot see
+# ----------------------------------------------------------------------
+# A player on injured reserve drops OFF the weekly injury report entirely. With
+# no practice to participate in there is nothing to report, so the model above
+# reads him as "not on report" -- which is the *healthiest* state it knows
+# (0.92) -- and prices a man on IR as a starter.
+#
+# This is not a rounding error at the margin. It is the difference between a
+# lineup slot and a certain zero, and it put A.J. Brown, who has been on IR
+# since the roster cutdowns, into a recommended week 2 lineup. 96 skill players
+# were in a non-playable status this week and every one of them was priced as
+# healthy.
+#
+# The answer was sitting in a roster column nothing was reading. Measured
+# against this season's own week 1 box scores -- did a player carrying this
+# status on the current roster actually appear in a game?
+#
+#     ACT  0.695 (n=502)    DEV  0.043 (n=187)    RES  0.052 (n=77)
+#     INA / EXE / RET / CUT  0.000 (n=19)
+#
+# ACT's 0.695 is not an availability number and is deliberately absent below:
+# it is third-string quarterbacks who dressed and never took a snap, which the
+# usage model already handles. The rest are, and they are what this encodes.
+# RES is not quite zero because four of those players were placed on reserve
+# *after* playing in week 1, which is the correct reading of that cell rather
+# than noise in it.
+#
+# Historical seasons cannot check this. Their roster files carry one row per
+# player holding the status he ended the season on, not a week-by-week panel,
+# so the only honest sample is the live one above.
+ROSTER_STATUS_PLAY_RATE: dict[str, float] = {
+    "RES": 0.052,  # reserve: injured / PUP / non-football injury / suspended
+    "DEV": 0.043,  # practice squad, playable only via a gameday elevation
+    "INA": 0.000,  # declared inactive for this week's game
+    "EXE": 0.000,  # commissioner's exempt list (holdout, personal matter)
+    "CUT": 0.000,  # waived or released; not on an NFL roster today
+    "RET": 0.000,  # retired
+}
+
+# A status describes TODAY, and nothing in this data dates a return. The roster
+# file is a live snapshot with no designation date on it, so a player placed on
+# IR at the August cutdowns -- out for the season, ineligible to be activated at
+# all -- is indistinguishable from one placed there last week under the league's
+# four-game minimum. The abbreviation looked like it might separate them (R01
+# against R48, "designated for return") and on this season's own box scores it
+# does not: 0.065 on n=62 against 0.000 on n=17, which is one man placed on
+# reserve *after* playing in week 1, not a signal.
+#
+# So the gate holds for the whole planning horizon rather than expiring into a
+# guessed return curve. That is a deliberate trade and a cheap one. Letting it
+# lapse after four weeks reverted A.J. Brown to 75% availability and pencilled
+# him in for week 7 -- the same man this gate exists to keep out of a lineup.
+# Nothing is permanently lost by the conservative reading: the plan is rebuilt
+# every week, and a player who does come back flips to ACT on the next roster
+# refresh and re-enters the pool at full value that same day. Only week one of
+# the plan is ever acted on; the later weeks are a shape, not a commitment.
+
+
+def roster_status_availability(status: str) -> float | None:
+    """P(plays) given today's roster status, for every week of the horizon.
+
+    Returns ``None`` where the status has nothing to say -- an active player or
+    an unrecognised code -- and the injury report and hazard model answer
+    instead. There is no horizon argument because there is no return curve to
+    model; see above for why.
+    """
+    code = (status or "").strip().upper()
+    return ROSTER_STATUS_PLAY_RATE.get(code)
+
+
+# What to print for a status, so a lineup can be audited at a glance. The codes
+# themselves are opaque, and "RES" in a column is not an answer to "why is this
+# man in my lineup".
+ROSTER_STATUS_LABEL: dict[str, str] = {
+    "RES": "INJURED RESERVE",
+    "DEV": "practice squad",
+    "INA": "inactive",
+    "EXE": "exempt list",
+    "CUT": "released",
+    "RET": "retired",
+}
+
+
+def roster_status_label(status: str) -> str:
+    """A human-readable gate reason, or "" for a player the gate does not touch."""
+    return ROSTER_STATUS_LABEL.get((status or "").strip().upper(), "")
+
+
+def roster_status_map(rosters: pd.DataFrame) -> dict[str, str]:
+    """Player id -> current roster status, from each player's latest snapshot.
+
+    The roster file is a live snapshot rather than a panel: one row per player,
+    stamped with the week his status was last touched. A player cut at the
+    August deadline still carries week 1 while everyone else has moved on, so
+    the latest row per player is the current truth -- not the latest week.
+    """
+    if rosters is None or rosters.empty:
+        return {}
+    if not {"gsis_id", "status"} <= set(rosters.columns):
+        return {}
+
+    frame = rosters.dropna(subset=["gsis_id"])
+    if "week" in frame.columns:
+        frame = frame.sort_values("week")
+    frame = frame.drop_duplicates("gsis_id", keep="last")
+    return {
+        str(pid): str(code)
+        for pid, code in zip(frame["gsis_id"], frame["status"])
+        if isinstance(code, str) and code.strip()
+    }
+
+
+# ----------------------------------------------------------------------
 # Returning from the injury that ended last season
 # ----------------------------------------------------------------------
 # A blind spot the report cannot cover. `report_status` is what the model reads,

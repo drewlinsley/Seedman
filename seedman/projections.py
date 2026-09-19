@@ -42,6 +42,9 @@ from .injury import (
     latest_injury_report,
     players_returning_from_injury,
     return_multiplier,
+    roster_status_availability,
+    roster_status_label,
+    roster_status_map,
 )
 from .scoring import build_dst_stat_lines, score_dst, score_players
 
@@ -170,6 +173,11 @@ class ProjectionModel:
         # The PRIOR season's report is what says why a season ended; this
         # season's says nothing about it, and passing it found four players in
         # the whole league and missed the quarterback this was written for.
+        # Current roster status (active / reserve / practice squad / released).
+        # The injury report says nothing about any of these, and a player on
+        # injured reserve is invisible to it by construction.
+        self.roster_status = roster_status_map(rosters)
+
         self.returning = (
             players_returning_from_injury(weekly_prior, injuries_prior)
             if injuries_prior is not None
@@ -429,7 +437,21 @@ class ProjectionModel:
                             rec.position, week, self.returning[rec.player_id]
                         )
 
-                avail = self._future_availability(rec.player_id, rec.position, weeks_ahead, avail_now)
+                # A status the injury report cannot express -- injured
+                # reserve, the practice squad, the exempt list -- overrides it
+                # outright, and for every week of the plan rather than just
+                # this one. Only 2 of the 278 players on reserve appear on the
+                # week's injury report at all, so nothing downstream would
+                # catch this if the gate let go.
+                gated = roster_status_availability(
+                    self.roster_status.get(rec.player_id, "")
+                )
+                if gated is not None:
+                    avail = gated
+                else:
+                    avail = self._future_availability(
+                        rec.player_id, rec.position, weeks_ahead, avail_now
+                    )
 
                 # Shrinkage tuned for ranking leaves the level biased low, by
                 # more early in a season than late. The correction is uniform
@@ -464,7 +486,14 @@ class ProjectionModel:
                         "conditional_mean": conditional_mean,
                         "opponent": str(spot["opponent"]),
                         "implied_team_total": own_total,
-                        "report_status": "" if report_status in (NOT_ON_REPORT, "(none)") else report_status,
+                        # The one column a human scans before setting a
+                        # lineup, so it says what it means. Blanking the two
+                        # common cases kept it quiet, and quiet is what let a
+                        # man on injured reserve print like everybody else.
+                        "report_status": _status_label(
+                            self.roster_status.get(rec.player_id, ""),
+                            report_status,
+                        ),
                     }
                 )
 
@@ -530,6 +559,28 @@ def _volatility_for(mean: float, position: str, *, fallback: float) -> float:
     if not entry:
         return max(fallback, 1.0)
     return float(max(entry["slope"] * mean + entry["intercept"], 1.0))
+
+
+def _status_label(roster_status: str, report_status: str) -> str:
+    """One column saying why a player is, or is not, a safe start.
+
+    The roster gate wins where it applies: a man on injured reserve is absent
+    from the injury report by construction, so the report has nothing to say
+    about him and must not be what gets printed. Below that the two blank-ish
+    report states are spelled out rather than hidden, because they are not the
+    same state and do not carry the same availability -- a player the team
+    listed and left undesignated has been actively cleared (0.95), and one the
+    team never listed at all has not (0.92).
+    """
+    gated = roster_status_label(roster_status)
+    if gated:
+        return gated
+    if report_status == NOT_ON_REPORT:
+        return "not listed"
+    if report_status == "(none)":
+        return "cleared"
+    return report_status
+
 
 
 def _calibrate_level(rate: float, position: str, week: int) -> float:
