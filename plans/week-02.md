@@ -8,31 +8,42 @@ Record 1-0. Lineup locks **Sunday 20 September, 1:00 PM ET**.
 |---|---|---|---|---|---|---|
 | QB | **Brock Purdy** | SF | vs MIA | Sun 4:25 | 15.15 | not listed |
 | RB | **Kenneth Walker III** | KC | vs IND | Sun 8:20 | 12.67 | not listed |
-| WR1 | **George Pickens** | DAL | vs WAS | Sun 4:25 | 10.08 | not listed |
-| WR2 | **Davante Adams** | LA | vs NYG | Mon 8:15 | 9.99 | cleared |
+| WR1 | **Davante Adams** | LA | vs NYG | Mon 8:15 | 9.99 | cleared |
+| WR2 | **Deebo Samuel Sr.** | SF | vs MIA | Sun 4:25 | 10.73 | not listed |
 | TE | **Tucker Kraft** | GB | @ NYJ | Sun 1:00 | 5.60 | not listed |
 | FLEX | **Aaron Jones** | MIN | @ CHI | Sun 1:00 | 7.34 | not listed |
 
-**60.8 projected ± 17.8 · opponent ~61.2 · 49.4% to win**
-P(make the playoffs) 64.5% · P(win it all) 28.8%
+**61.5 projected ± 19.4 · opponent ~61.2 · 50.4% to win**
+P(make the playoffs) 65.1% · P(win it all) **29.2%** — the highest of anything run
+this week.
 
-All six audited against the roster file: every one `ACT/A01`. Six different NFL
-teams, so the one-per-team cap holds without a config change.
+All six audited against the roster file: every one `ACT/A01`.
+
+Purdy and Deebo are both 49ers, so this needs `--max-per-team 2`. That is a
+per-run flag, not a change to `configs/league.yaml` — the cap returns to one next
+week unless it is passed again.
 
 ```bash
-seedman optimize --max-per-team 1 --max-per-game 2 --earliest-kickoff sunday \
+seedman optimize --max-per-team 2 --max-per-game 2 --earliest-kickoff sunday \
   --hold "Derrick Henry" "Ryan Flournoy" --avoid-opponent CIN \
-  --start "Brock Purdy" "George Pickens" "Kenneth Walker III" \
-          "Aaron Jones" "Davante Adams" "Tucker Kraft"
+  --start "Brock Purdy" "Deebo Samuel Sr." "Kenneth Walker III" \
+          "Aaron Jones" "Tucker Kraft"
 ```
+
+The spread widens to ±19.4 from ±17.8, which is the correlation model doing its
+job rather than a defect: a quarterback and his own receiver rise and fall on the
+same throws, so a stack has fatter tails in both directions. At a coin flip that
+extra variance is working for you. It would not be in a week you were already
+favoured to win, and it is exactly what makes stacking dangerous in a
+single-elimination playoff week.
 
 ### The quarterback decision, priced four ways
 
 | lineup | proj | win | P(title) | cap change? |
 |---|---|---|---|---|
 | Caleb Williams (solver's pick) | 66.6 | **57.8%** | 28.6% | no |
-| Purdy + Deebo stacked | 61.5 | 50.4% | **29.2%** | yes (`--max-per-team 2`) |
-| **Purdy + Pickens (chosen)** | 60.8 | 49.4% | 28.8% | no |
+| **Purdy + Deebo stacked (chosen)** | 61.5 | 50.4% | **29.2%** | yes (`--max-per-team 2`) |
+| Purdy + Pickens | 60.8 | 49.4% | 28.8% | no |
 | Purdy + Luther Burden | 59.2 | 47.0% | 28.9% | no |
 
 Purdy costs about 8 points of week-2 win probability against Caleb, and only half
