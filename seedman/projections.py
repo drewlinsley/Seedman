@@ -596,16 +596,41 @@ def _calibrate_level(rate: float, position: str, week: int) -> float:
     return max(0.0, rate * entry["slope"] + entry["intercept"])
 
 
+# nflverse stamps every kickoff in US Eastern time and says so nowhere in the
+# file. Comparing that clock against a naive `now` is only right when the
+# process clock is also Eastern -- and a cloud container's is UTC. At 10:39 on
+# a Sunday morning in New York the container read 14:39, every 1:00 PM kickoff
+# parsed as ninety minutes past, and nine games' worth of players -- eighteen
+# teams -- silently left the pool. Every lineup that morning was drawn from the
+# late slate alone, and nothing in the output said anything was missing.
+#
+# It only bites on game day, in the window between a kickoff's Eastern reading
+# and its UTC one, which is why a Saturday run never showed it.
+KICKOFF_TZ = "America/New_York"
+
+
+def as_eastern(moment) -> pd.Timestamp:
+    """A wall-clock moment as an Eastern-time instant.
+
+    A naive timestamp is taken to already be Eastern, which is what every
+    kickoff and every hand-typed `--as-of 2026-09-27 12:30` means; an aware one
+    is converted, so a UTC clock lands on the same instant rather than the same
+    digits.
+    """
+    ts = pd.Timestamp(moment)
+    return ts.tz_localize(KICKOFF_TZ) if ts.tzinfo is None else ts.tz_convert(KICKOFF_TZ)
+
+
 def _kicked_off(games: pd.DataFrame, as_of: pd.Timestamp) -> set[str]:
     """Teams whose game has already started, and so are unpickable."""
     kickoff = pd.to_datetime(
         games["gameday"].astype(str) + " " + games["gametime"].fillna("13:00").astype(str),
         errors="coerce",
-    )
+    ).dt.tz_localize(KICKOFF_TZ, ambiguous="NaT", nonexistent="NaT")
     # A game with an unparseable time is treated as not yet played: wrongly
     # dropping an available player is worse than briefly offering a locked one,
     # which the league site would reject anyway.
-    started = games[kickoff.notna() & (kickoff <= as_of)]
+    started = games[kickoff.notna() & (kickoff <= as_eastern(as_of))]
     return set(started["home_team"]) | set(started["away_team"])
 
 

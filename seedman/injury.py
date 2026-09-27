@@ -205,21 +205,32 @@ def _clean(value: str | None) -> str:
 
 
 def latest_injury_report(injuries: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
-    """The most recent injury report at or before `week`, one row per player.
+    """The most recently FILED report at or before `week`, one row per player.
 
-    Falling back to an earlier week matters midweek, when this week's report has
-    not been filed yet but last week's is still the best evidence available.
+    The whole report is taken from one week -- the latest that has any rows --
+    rather than the latest row per player. Falling back a week matters midweek,
+    when this week's has not been filed yet. But a player who was Out in week 1
+    and has since dropped off the report has recovered: teams must list every
+    injured player every week, so absence is the healthy state. Carrying his
+    week-1 row forward marked TreVeyon Henderson, Kyler Murray and three others
+    as Out for a game they were cleared for.
+
+    Worse than stale: pandas' ``groupby().last()`` takes the last NON-NULL value
+    per column, so a week-2 row with a blank game status kept week 1's "Out"
+    beside week 2's "Full Participation" -- a row that never existed on any
+    report. Hence ``drop_duplicates`` on the filed week, never ``.last()``.
     """
+    columns = ["gsis_id", "report_status", "practice_status", "week", "position", "team"]
     if injuries.empty:
-        return pd.DataFrame(columns=["gsis_id", "report_status", "practice_status", "week"])
+        return pd.DataFrame(columns=columns)
 
-    frame = injuries[(injuries["season"] == season) & (injuries["week"] <= week)].copy()
+    frame = injuries[(injuries["season"] == season) & (injuries["week"] <= week)]
     if frame.empty:
-        return pd.DataFrame(columns=["gsis_id", "report_status", "practice_status", "week"])
+        return pd.DataFrame(columns=columns)
 
-    frame = frame.sort_values("week")
-    latest = frame.groupby("gsis_id", as_index=False).last()
-    return latest[["gsis_id", "report_status", "practice_status", "week", "position", "team"]]
+    filed = int(frame["week"].max())
+    latest = frame[frame["week"] == filed].drop_duplicates("gsis_id", keep="last")
+    return latest[columns].copy()
 
 
 # ----------------------------------------------------------------------

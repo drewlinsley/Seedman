@@ -11,6 +11,7 @@ import pandas as pd
 
 from . import pipeline
 from .config import ConfigError, LeagueConfig, default_config_path
+from .projections import KICKOFF_TZ
 from .data import NflverseClient
 from .league.base import LeagueState
 from .league.manual import STARTER_TEMPLATE, ManualAdapter, UnresolvedPlayers
@@ -450,8 +451,11 @@ def _parse_as_of(value: str):
     """Resolve the --as-of flag to a timestamp, or None to disable the filter."""
     if not value or str(value).lower() in {"off", "none", "false"}:
         return None
+    # Eastern, explicitly. The container's own clock is UTC, and a naive `now`
+    # read against Eastern kickoffs once emptied the 1:00 PM slate out of a
+    # Sunday-morning run.
     if str(value).lower() == "now":
-        return pd.Timestamp.now()
+        return pd.Timestamp.now(tz=KICKOFF_TZ)
     return pd.Timestamp(value)
 
 

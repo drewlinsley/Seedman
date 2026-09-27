@@ -74,3 +74,62 @@ def test_latest_report_falls_back_to_an_earlier_week():
 
 def test_empty_injury_frame_is_handled():
     assert latest_injury_report(pd.DataFrame(), 2026, 1).empty
+
+
+# ----------------------------------------------------------------------
+# A report row belongs to the week it was filed for
+# ----------------------------------------------------------------------
+def _rows(*rows):
+    return pd.DataFrame(
+        rows,
+        columns=["season", "week", "gsis_id", "position", "team", "report_status", "practice_status"],
+    )
+
+
+def test_a_player_who_dropped_off_the_report_is_not_still_out():
+    """Teams list every injured player every week; absence means recovered.
+
+    TreVeyon Henderson: Out in week 1, cleared in week 2, off the report in
+    week 3 -- and projected at 0.00 as 'Out' for a game he started.
+    """
+    inj = _rows(
+        (2026, 1, "p1", "RB", "NE", "Out", "Did Not Participate In Practice"),
+        (2026, 2, "p1", "RB", "NE", None, "Full Participation in Practice"),
+        (2026, 3, "p2", "RB", "NE", "Questionable", "Limited Participation in Practice"),
+    )
+    latest = latest_injury_report(inj, 2026, week=3)
+    assert set(latest["gsis_id"]) == {"p2"}
+
+
+def test_a_blank_status_this_week_does_not_inherit_last_weeks_out():
+    """groupby().last() takes the last non-null per COLUMN and built a row that
+    never existed: week 1's 'Out' beside week 2's 'Full Participation'."""
+    inj = _rows(
+        (2026, 1, "p1", "RB", "NE", "Out", "Did Not Participate In Practice"),
+        (2026, 2, "p1", "RB", "NE", None, "Full Participation in Practice"),
+    )
+    latest = latest_injury_report(inj, 2026, week=2).set_index("gsis_id")
+    assert pd.isna(latest.loc["p1", "report_status"])
+    assert latest.loc["p1", "practice_status"] == "Full Participation in Practice"
+
+
+def test_midweek_falls_back_to_the_last_filed_report_as_a_whole():
+    """Tuesday of week 4: week 4's report is not filed yet, week 3's is the
+    best evidence -- for everyone on it, and for nobody who is not."""
+    inj = _rows(
+        (2026, 2, "p9", "WR", "NO", "Out", "Did Not Participate In Practice"),
+        (2026, 3, "p1", "RB", "NE", "Out", "Did Not Participate In Practice"),
+    )
+    latest = latest_injury_report(inj, 2026, week=4)
+    assert latest["week"].tolist() == [3]
+    assert set(latest["gsis_id"]) == {"p1"}
+
+
+def test_the_future_is_still_clipped():
+    """A leakage guard: a week-5 row must not answer a week-3 question."""
+    inj = _rows(
+        (2026, 3, "p1", "RB", "NE", None, "Full Participation in Practice"),
+        (2026, 5, "p1", "RB", "NE", "Out", "Did Not Participate In Practice"),
+    )
+    latest = latest_injury_report(inj, 2026, week=3).set_index("gsis_id")
+    assert pd.isna(latest.loc["p1", "report_status"])

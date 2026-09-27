@@ -657,11 +657,26 @@ class SurvivorOptimizer:
                     for key in variables
                     if key[0] == first and str(frame.at[key[2], "player_id"]) == player_id
                 ]
-                if chosen:
-                    problem += (
-                        pulp.lpSum(chosen) == 1,
-                        f"force_{_sanitise(player_id)}",
+                if not chosen:
+                    # A forced player who is not in the pool used to be
+                    # skipped in silence, and the lineup went on without the
+                    # one thing that was asked for. He can be missing because
+                    # he is burned, his game has kicked off, his status gates
+                    # him, or the candidate trim never reached him -- all of
+                    # which the person forcing him needs to hear about.
+                    names = self.projections.loc[
+                        self.projections["player_id"].astype(str) == player_id, "name"
+                    ]
+                    label = str(names.iloc[0]) if len(names) else player_id
+                    raise ValueError(
+                        f"cannot start {label!r} in week {first}: he is not in "
+                        "this week's candidate pool (burned, kicked off, gated "
+                        "by roster status, or below the --candidates cut)"
                     )
+                problem += (
+                    pulp.lpSum(chosen) == 1,
+                    f"force_{_sanitise(player_id)}",
+                )
 
         # Usage cap: the one-start-per-season rule, and the only reason any of
         # this is harder than starting your best player every week.

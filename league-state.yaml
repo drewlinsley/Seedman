@@ -4,14 +4,16 @@
 # are permanently off the board, and the optimizer will never suggest them again.
 # Names are matched loosely, so "Ja'Marr Chase" and "jamarr chase" both work.
 
-current_week: 2
+current_week: 3
 
 # Head-to-head, nobody is eliminated weekly; this is just the league size.
 teams_remaining: 12
 
 # Week 1: 85.00 to Josh Schorr's 82.46. A 2.54-point win.
+# Week 2: 99.28 (Adams 35.5, Purdy 28.5, Walker 20.8). Result ASSUMED a win from
+# the score -- confirm, and add the opponent's total below.
 record:
-  wins: 1
+  wins: 2
   losses: 0
 
 # Week 1 — CONFIRMED from the league site's own lineup card, not inferred.
@@ -23,6 +25,15 @@ used_players:
   - Dallas Goedert     # TE    PHI  21.70
   - Chris Olave        # FLEX  NO   23.20  <- the swap that won the week
   #                            total: 85.00
+
+# Week 2 -- CONFIRMED from the league site's burned pool (12 listed).
+  - Brock Purdy        # QB    SF   28.48
+  - Kenneth Walker III # RB    KC   20.80
+  - Davante Adams      # WR    LAR  35.50
+  - Deebo Samuel Sr.   # WR    SF    5.00
+  - Tucker Kraft       # TE    GB    2.50
+  - George Pickens     # FLEX  DAL   7.00
+  #                            total: 99.28
 
 # Any NFL player is pickable each week (no draft).
 available_players: []

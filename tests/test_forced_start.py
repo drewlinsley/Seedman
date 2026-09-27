@@ -132,3 +132,25 @@ def test_holds_and_starts_both_survive_together():
     plan = _solve(hold_players={"QB0"}, start_players={"QB5"})
     week2 = {p["player_id"] for p in _week(plan, 2).picks}
     assert "QB5" in week2 and "QB0" not in week2
+
+
+def test_forcing_a_player_who_is_not_in_the_pool_raises_rather_than_shrugging():
+    """The silent version ran a whole plan without the one player asked for.
+
+    He can be missing because he is burned, his game has kicked off, his roster
+    status gates him, or the candidate trim never reached him. Every one of
+    those is something the person forcing him needs to hear, not discover from
+    a lineup that quietly went on without him.
+    """
+    with pytest.raises(ValueError, match="RB99"):
+        _solve(start_players={"RB99"})
+
+
+def test_the_error_names_the_player_when_the_pool_knows_him():
+    """A gsis id is not an answer; the name is, when there is one to give."""
+    frame = _projections()
+    frame = frame[~((frame["player_id"] == "RB3") & (frame["week"] == 2))]
+    with pytest.raises(ValueError, match="RB 3"):
+        SurvivorOptimizer(
+            _config(), frame, field_model=FieldModel(mean=20.0, sd=8.0), start_players={"RB3"}
+        ).solve()
