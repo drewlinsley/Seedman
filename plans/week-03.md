@@ -1,6 +1,6 @@
 # Week 3 — Rocco Siffredi, 2026
 
-Record 2-0 (week 2 assumed a win at 99.28 — confirm, and add the opponent's total
+Record 2-0, confirmed. Week 2 was 99.28; add the opponent's total
 to `observed_field_scores`). Lineup locks **Sunday 27 September, 1:00 PM ET**.
 
 ## Start this

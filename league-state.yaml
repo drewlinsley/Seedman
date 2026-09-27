@@ -10,8 +10,8 @@ current_week: 3
 teams_remaining: 12
 
 # Week 1: 85.00 to Josh Schorr's 82.46. A 2.54-point win.
-# Week 2: 99.28 (Adams 35.5, Purdy 28.5, Walker 20.8). Result ASSUMED a win from
-# the score -- confirm, and add the opponent's total below.
+# Week 2: 99.28 (Adams 35.5, Purdy 28.5, Walker 20.8). CONFIRMED a win; the
+# opponent's total is still needed below.
 record:
   wins: 2
   losses: 0
