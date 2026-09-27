@@ -8,21 +8,29 @@ to `observed_field_scores`). Lineup locks **Sunday 27 September, 1:00 PM ET**.
 | slot | player | team | opponent | kickoff | proj | status |
 |---|---|---|---|---|---|---|
 | QB | **Jared Goff** | DET | vs NYJ | Sun 1:00 | 20.15 | not listed |
-| RB | **Derrick Henry** | BAL | @ DAL | Sun 4:25 | 15.89 | not listed |
+| RB | **Christian McCaffrey** | SF | vs ARI | Sun 4:05 | 14.63 | cleared |
 | WR1 | **Khalil Shakir** | BUF | vs LAC | Sun 1:00 | 9.87 | not listed |
 | WR2 | **Xavier Worthy** | KC | @ MIA | Sun 1:00 | 9.30 | not listed |
 | TE | **Jake Ferguson** | DAL | vs BAL | Sun 4:25 | 5.79 | not listed |
-| FLEX | **Christian McCaffrey** | SF | vs ARI | Sun 4:05 | 14.63 | cleared |
+| FLEX | **Rashod Bateman** | BAL | @ DAL | Sun 4:25 | 9.33 | not listed |
 
-**75.6 projected ± 21.0 · opponent ~69.6 · 58.0% to win**
-P(make the playoffs) 66.8% · P(win it all) 26.3%
+**69.1 projected ± 19.5 · opponent ~69.6 · 49.2% to win**
+P(make the playoffs) 67.0% · P(win it all) **26.5%** — the best title number of any
+lineup run this week.
 
-All six audited against the roster file by gsis id: every one `ACT/A01`.
+Drew's call: Henry and McCaffrey together was too much. This is the solver's own
+optimum with Henry banked; the weekly re-plan decides where he goes, and the
+pencil is a shape, not a commitment. All six audited by gsis id: every one
+`ACT/A01`. Bateman gets more of Baltimore's targets with Zay Flowers Questionable
+(hamstring, limited).
 
 ```bash
 seedman optimize --max-per-team 1 --max-per-game 2 --as-of now \
-  --hold "Saquon Barkley" --start "Derrick Henry"
+  --hold "Saquon Barkley"
 ```
+
+The RB-flavoured alternative at FLEX is **TreVeyon Henderson** (69.6, 50.0%,
+26.2% title) — a wash against this, and it spends a rising asset.
 
 ## "Don't blow all the good players" — what each stud actually costs
 
@@ -31,9 +39,9 @@ question; the win column is what you get for it this week.
 
 | lineup | proj | win | P(playoffs) | P(title) |
 |---|---|---|---|---|
-| solver's own pick (spends McCaffrey, banks the rest) | 69.1 | 49.2% | 67.0% | 26.5% |
+| **solver's own pick — McCaffrey, Henry banked (chosen)** | **69.1** | **49.2%** | 67.0% | **26.5%** |
 | Henry instead of McCaffrey | 70.7 | 51.6% | 66.8% | 26.4% |
-| **Henry and McCaffrey (chosen)** | **75.6** | **58.0%** | 66.8% | 26.3% |
+| Henry and McCaffrey | 75.6 | 58.0% | 66.8% | 26.3% |
 | TreVeyon Henderson at RB (the riser) | 69.6 | 50.0% | 66.4% | 26.2% |
 | Josh Allen | 78.9 | 62.1% | **70.8%** | **24.9%** |
 
