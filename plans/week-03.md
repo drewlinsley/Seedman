@@ -10,51 +10,56 @@ to `observed_field_scores`). Lineup locks **Sunday 27 September, 1:00 PM ET**.
 | QB | **Jared Goff** | DET | vs NYJ | Sun 1:00 | 20.15 | not listed |
 | RB | **Christian McCaffrey** | SF | vs ARI | Sun 4:05 | 14.63 | cleared |
 | WR1 | **Tetairoa McMillan** | CAR | @ CLE | Sun 1:00 | 8.89 | not listed |
-| WR2 | **Rashod Bateman** | BAL | @ DAL | Sun 4:25 | 9.33 | not listed |
+| WR2 | **Xavier Worthy** | KC | @ MIA | Sun 1:00 | 9.30 | not listed |
 | TE | **Travis Kelce** | KC | @ MIA | Sun 1:00 | 7.63 | not listed |
 | FLEX | **Khalil Shakir** | BUF | vs LAC | Sun 1:00 | 9.87 | not listed |
 
 **70.5 projected ± 19.6 · opponent ~69.6 · 51.2% to win**
-P(make the playoffs) 66.9% · P(win it all) 26.2%
+P(make the playoffs) 66.5% · P(win it all) 26.2%
 
-All six audited by gsis id: every one `ACT/A01`. Henry, Worthy and Barkley held.
+All six audited by gsis id: every one `ACT/A01`. Henry and Barkley held. Two
+Chiefs, so `--max-per-team 2` — a per-run flag, not a config change.
 
 ```bash
-seedman optimize --max-per-team 1 --max-per-game 2 --as-of now \
-  --hold "Saquon Barkley" "Xavier Worthy" "Derrick Henry" \
-  --start "Christian McCaffrey" "Tetairoa McMillan"
+seedman optimize --max-per-team 2 --max-per-game 2 --as-of now \
+  --hold "Saquon Barkley" "Derrick Henry" \
+  --start "Christian McCaffrey" "Xavier Worthy" "Travis Kelce" "Tetairoa McMillan"
 ```
 
-### Worthy out, by matchup — Drew's lens
+### The Miami correction
 
-Asked for: receivers facing the worst pass defences. Half-PPR points allowed to
-receivers per game over weeks 1-2 (rank 1 = worst). Worthy's opponent, Miami,
-is **27th of 32** — one of the stingiest — so the swap fits the lens.
+An earlier version of this file ranked Miami's pass defence 27th of 32 — one of
+the stingiest — and swapped Worthy out on that basis. Drew: "Miami is awful your
+stats are wrong." He was right, and the number was arithmetically correct, which
+is the whole problem with it.
 
-| WR in Worthy's place | opp pass D | proj | usage (snaps; tgts wk 1, wk 2) | win | P(title) |
-|---|---|---|---|---|---|
-| **Tetairoa McMillan** CAR @ CLE | #7 | 8.89 | 80%; 8, 10 — 101 yds last week | **51.2%** | 26.2% |
-| Ladd McConkey LAC @ BUF | #3 | 8.82 | 46%; 7, 3 | 51.1% | 26.3% |
-| Jakobi Meyers JAX vs NE (solver's pick) | #22 | 8.81 | 90%; 2, 1 | 51.1% | 26.4% |
-| Josh Downs IND vs HOU | **#1** | 7.62 | 83%; 4, 9 — Pierce and Dulin Out | 49.5% | 26.2% |
-| Kayshon Boutte HOU vs IND | #2 | 7.52 | 72%; 2, 5 | 49.3% | 26.3% |
+Miami has lost 27-13 and 35-13 and gives up **80 points a game to skill players,
+9th-most in the league**: #3 worst against running backs (Jeanty 29.7,
+McCaffrey 20.6), #7 worst against quarterbacks (Purdy 28.5). The receiver-only
+split reads "stingy" because the two offenses that beat them did not need their
+receivers: the Raiders ran Jeanty, the 49ers threw to Kittle (16.0) while Deebo
+scored 5 — in this very lineup, a week earlier. A two-game positional split
+measures the opponents' play-calling, not the defence. That is the schedule
+confound the README describes, and the table was handed over anyway. The model
+never made the mistake: Worthy's 9.30 already carries Kansas City's 27.5
+implied total, which is why he was in the lineup to begin with.
 
-Every row is within 0.2 of title, so the lens is free to decide. McMillan is the
-pick because he is the only one with all three: a bad opposing pass defence, the
-best projection, and the best usage — Carolina's clear WR1 at 80% of snaps with
-ten targets last week. Josh Downs is the pure play on the lens (#1) with real
-usage now that Indianapolis has lost Pierce and Dulin, but a 20.5 implied total
-and a projection 1.3 lower. McConkey plays fewer than half of the Chargers'
-snaps. Meyers gets snaps and no targets.
+### Attacking Miami, priced
 
-Dropping Worthy also frees the Kansas City slot under the one-per-team cap, and
-**Travis Kelce** takes the tight end spot over Jake Ferguson: 7.63 against 5.79,
-on 11 targets, 9 catches and 101 yards in week 2. Every candidate lineup above
-includes that upgrade.
+| lineup | proj | win | P(title) |
+|---|---|---|---|
+| Worthy alone, Ferguson at TE (one per team) | 69.1 | 49.2% | 26.5% |
+| McMillan for Worthy, Kelce follows (one per team) | 70.5 | 51.2% | 26.2% |
+| **Worthy + Kelce + McMillan (chosen)** | **70.5** | **51.2%** | 26.2% |
+| Worthy + Kelce + Josh Palmer (solver's fill) | 71.2 | 52.3% | 26.5% |
 
-The caveat, once: points-allowed-by-position measured monotonically *worse* than
-the model on held-out 2025, and two games is two games. It is used here because
-it was asked for and because it costs nothing this week.
+All within 0.3 of title. The Palmer row is the best on paper and was not taken:
+his 9.67 rests on 2 and 3 targets across two games at 38% of Buffalo's snaps —
+the projection is the Bills' 28.75 implied total, not the player. McMillan has 8
+and 10 targets at 80% of Carolina's snaps and costs 0.7 points to prefer.
+Worthy and Bateman are interchangeable to the model (9.30 against 9.33); Worthy
+brings Kelce with him, and Kelce is 11 targets, 9 catches and 101 yards last
+week against Ferguson's 5.79.
 
 ## "Don't blow all the good players" — what each stud actually costs
 
