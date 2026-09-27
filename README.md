@@ -451,6 +451,33 @@ exactly zero — a join against a snapshot that reads like a result.
 **What the fix cost: nothing, because those points were never there.** The
 lineup it replaced projected 67.7 with a certain zero inside it.
 
+**Two more from the same family, found the following Sunday.** Both changed the
+pool a lineup was drawn from, and neither said anything.
+
+*Kickoffs are Eastern; the clock was UTC.* nflverse stamps every kickoff in US
+Eastern time and says so nowhere. `--as-of now` compared that against the
+container's clock, which is UTC, so at 10:39 on a Sunday morning every 1:00 PM
+kickoff read as ninety minutes past and nine games — eighteen teams — left the
+pool. Every lineup that morning was drawn from the late slate alone. It only
+bites on game day, in the window between a kickoff's Eastern and UTC readings,
+which is exactly why a Saturday run never showed it. Kickoffs are now localised
+and a naive `--as-of` is taken to mean Eastern, which is what it always meant.
+
+*A report row belongs to the week it was filed for.* The report lookup took the
+latest row per player, so a man Out in week 1 who recovered and dropped off the
+report stayed Out for good — teams must list every injured player every week,
+so absence is the healthy state. TreVeyon Henderson, Kyler Murray and three
+others projected at zero for games they were cleared for. Worse than stale:
+pandas' `groupby().last()` takes the last non-null value per *column*, so week
+1's "Out" was glued to week 2's "Full Participation" into a row no report ever
+carried. The whole report now comes from the latest filed week.
+
+The pattern across all three: a missing row is a state, and it is never the
+same state as a blank one. Absent from the injury report meant "healthy" for a
+man on IR and "still Out" for a man who had recovered, and both were wrong in
+opposite directions. The roster column answers the first; the filed week
+answers the second.
+
 
 
 **The league site is not wired up.** `https://rocco-siffredi.onrender.com` is
