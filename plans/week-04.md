@@ -6,29 +6,65 @@ the site's burned pool. Locks at the first kickoff among your starters: **Sunday
 4 October, 1:00 PM ET**. IND @ WAS (London, 9:30) and PIT @ CLE (Thursday) are
 already locked.
 
-## Start this
+## Start this — no studs
 
 | slot | player | team | opponent | kickoff | proj | status |
 |---|---|---|---|---|---|---|
-| QB | **Lamar Jackson** | BAL | vs TEN | Sun 1:00 | 13.89 | cleared |
-| RB | **Emanuel Wilson** | SEA | vs LAC | Sun 4:25 | 3.76* | not listed |
-| WR1 | **Ja'Marr Chase** | CIN | vs JAX | Sun 1:00 | 11.32 | not listed |
+| QB | **Bryce Young** | CAR | vs DET | Sun 8:20 | 13.54 | cleared |
+| RB | **D'Andre Swift** | CHI | vs NYJ | Sun 1:00 | 10.54 | cleared |
+| WR1 | **Zay Flowers** | BAL | vs TEN | Sun 1:00 | 7.37 | Questionable |
 | WR2 | **DJ Moore** | BUF | vs NE | Sun 1:00 | 8.07 | cleared |
-| TE | **Brock Bowers** | LV | vs KC | Sun 4:25 | 6.93 | cleared |
-| FLEX | **D'Andre Swift** | CHI | vs NYJ | Sun 1:00 | 10.54 | cleared |
+| TE | **Dalton Schultz** | HOU | vs DAL | Sun 1:00 | 6.17 | cleared |
+| FLEX | **Emanuel Wilson** | SEA | vs LAC | Sun 4:25 | 3.76* | not listed |
 
-**54.5 projected ± 16.1 · opponent ~63.3 · 36.4% to win**
-P(make the playoffs) 54.8% · P(win it all) 20.7%
+**49.4 projected ± 15.2 · opponent ~63.3 · 28.8% to win**
+P(make the playoffs) 54.1% · P(win it all) 20.9%
 
 \* The model's number; see below for why it is too low.
 
-All six audited by gsis id: every one `ACT/A01`. Lamar, Swift full practice;
-Moore and Bowers limited with no designation.
+Drew's call: the earlier version spent Lamar, Chase and Bowers, and he wants
+studs saved for the bracket. Twenty-seven players are held **this week only** —
+they stay free for every later week:
+
+> QB Allen, Lamar, Mahomes, Burrow, Hurts · RB Gibbs, Henry, Bijan, Cook,
+> Barkley, Achane, Jeanty · WR Chase, Smith-Njigba, St. Brown, Lamb, Nacua,
+> Nabers, London, Collins, Higgins, G. Wilson · TE Bowers, McBride, Kittle,
+> LaPorta, Kincaid
+
+All six audited by gsis id: every one `ACT/A01`. Bryce Young full practice and
+361 / 287 / 291 yards with seven touchdowns so far, in the week's shootout
+(DET @ CAR, 51.5).
+
+**Zay Flowers:** Questionable, hamstring, limited — the identical tag he
+carried last week, when he played and caught 5 for 84. 1:00 PM inactives are
+out before lock; if he is down, **Jaylen Waddle** (DEN @ SF) is the swap: 48.8
+projected, 27.6%, 20.8% title.
 
 ```bash
 seedman optimize --max-per-team 1 --max-per-game 2 --as-of now \
-  --start "Emanuel Wilson" "Ja'Marr Chase"
+  --hold "Josh Allen" "Lamar Jackson" "Patrick Mahomes" "Joe Burrow" "Jalen Hurts" \
+         "Jahmyr Gibbs" "Derrick Henry" "Bijan Robinson" "James Cook" "Saquon Barkley" \
+         "De'Von Achane" "Ashton Jeanty" "Ja'Marr Chase" "Jaxon Smith-Njigba" \
+         "Amon-Ra St. Brown" "CeeDee Lamb" "Puka Nacua" "Malik Nabers" "Drake London" \
+         "Nico Collins" "Tee Higgins" "Garrett Wilson" "Brock Bowers" "Trey McBride" \
+         "George Kittle" "Sam LaPorta" "Dalton Kincaid" \
+  --start "Emanuel Wilson"
 ```
+
+### What saving the studs costs
+
+| lineup | proj | win | P(playoffs) | P(title) |
+|---|---|---|---|---|
+| solver's own pick (Lamar, Bowers) | 56.6 | 39.6% | 55.4% | 21.5% |
+| Wilson + Chase (Lamar, Chase, Bowers) | 54.5 | 36.4% | 54.8% | 20.7% |
+| no studs, solver free (Montgomery for Wilson) | 53.7 | 35.1% | 55.3% | **21.4%** |
+| **no studs + Wilson (chosen)** | 49.4 | 28.8% | 54.1% | 20.9% |
+
+Going stud-free costs **0.1 of title** against the solver's own pick — close to
+nothing — and the Wilson + Chase version it replaces was actually *worse* on
+title (20.7%). Drew's instinct was right on the number that matters; the price
+is paid in this week's win probability. The remaining gap to the stud-free
+optimum is Wilson at the model's 3.76; at ~8 it mostly closes.
 
 ## "Use Emmanuel Henderson"
 
@@ -60,25 +96,13 @@ A rough read: 15–18 carries at his ~4.0 career yards per carry plus touchdown
 equity is about **8 points**, not 3.76. That is a judgment, not a fit — but it is
 the difference between Wilson costing a lot and costing almost nothing.
 
-## Priced
+## Earlier version, kept for reference
 
-| lineup | proj | win | P(playoffs) | P(title) |
-|---|---|---|---|---|
-| solver's own pick, no Wilson | 56.6 | 39.6% | 55.4% | 21.5% |
-| Wilson, solver fills (Waddle at WR) | 49.9 | 29.2% | 54.2% | 21.0% |
-| **Wilson + Ja'Marr Chase (chosen)** | **54.5** | **36.4%** | 54.8% | 20.7% |
-| Wilson + Jahmyr Gibbs | 57.6 | 41.4% | 56.8% | 20.0% |
-| Wilson + Derrick Henry (bumps Lamar) | 52.2 | 33.1% | 54.0% | 20.9% |
-
-All Wilson rows use the model's 3.76. At ~8, add roughly 4 points and ~9 of win
-probability to each, which puts Wilson + Chase level with the solver's own pick.
-
-**Chase** is the best exchange rate on the board: +7.2 points of win probability
-for 0.3 of title. CIN vs JAX is tied for the highest total of the week (51.5),
-Cincinnati is implied 27.0, and Chase had 12 targets, 9 catches and 98 yards
-last week at 100% of snaps. **Gibbs** costs a full point of title — he is the
-week-17 running back — and stays banked. So do Josh Allen (week 16), Henry,
-Cook, Lamb, Jefferson and the rest.
+The first cut of this file started Lamar, Wilson, Chase, DJ Moore, Bowers and
+Swift (54.5, 36.4%, 20.7%). Chase was the best exchange rate on the board — +7.2
+points of win probability for 0.3 of title — but three studs in one regular-season
+week is the pattern Drew has now asked twice not to repeat, and the stud-free
+table above shows the title number agrees with him.
 
 ## Health and opportunity, week 4
 
