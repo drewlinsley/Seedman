@@ -4,7 +4,7 @@
 # are permanently off the board, and the optimizer will never suggest them again.
 # Names are matched loosely, so "Ja'Marr Chase" and "jamarr chase" both work.
 
-current_week: 3
+current_week: 4
 
 # Head-to-head, nobody is eliminated weekly; this is just the league size.
 teams_remaining: 12
@@ -12,9 +12,11 @@ teams_remaining: 12
 # Week 1: 85.00 to Josh Schorr's 82.46. A 2.54-point win.
 # Week 2: 99.28 (Adams 35.5, Purdy 28.5, Walker 20.8). CONFIRMED a win; the
 # opponent's total is still needed below.
+# Week 3: 58.66 if the agreed lineup was the one set (McMillan 2.7, Worthy 3.0,
+# Shakir 1.1). Result ASSUMED a loss from the score -- confirm.
 record:
   wins: 2
-  losses: 0
+  losses: 1
 
 # Week 1 — CONFIRMED from the league site's own lineup card, not inferred.
 used_players:
@@ -34,6 +36,16 @@ used_players:
   - Tucker Kraft       # TE    GB    2.50
   - George Pickens     # FLEX  DAL   7.00
   #                            total: 99.28
+
+# Week 3 -- ASSUMED: the last lineup agreed in chat. Confirm against the site's
+# burned pool; if any of these were not started, delete them here.
+  - Jared Goff         # QB    DET  19.36
+  - Christian McCaffrey # RB   SF   19.60
+  - Tetairoa McMillan  # WR    CAR   2.70
+  - Xavier Worthy      # WR    KC    3.00
+  - Travis Kelce       # TE    KC   12.90
+  - Khalil Shakir      # FLEX  BUF   1.10
+  #                            total: 58.66
 
 # Any NFL player is pickable each week (no draft).
 available_players: []
